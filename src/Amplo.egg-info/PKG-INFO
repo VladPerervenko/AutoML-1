@@ -1,0 +1,16 @@
+Metadata-Version: 2.1
+Name: Amplo
+Version: 0.0.2
+Summary: Automated Machine Learning Pipeline focused on tabular time series classification
+Home-page: https://github.com/nielsuit227/AutoML
+Author: Niels Uitterdijk
+Author-email: niels.uitterdijk@amplo.ch
+License: UNKNOWN
+Project-URL: Bug Tracker, https://github.com/nielsuit227/AutoML/issues
+Description: UNKNOWN
+Platform: UNKNOWN
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
