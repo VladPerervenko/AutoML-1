@@ -1,1 +1,2 @@
-from CatboostClassifier import CatboostClassifier
+from .CatBoostClassifier import CatBoostClassifier
+from .XGBClassifier import XGBClassifier

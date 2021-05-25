@@ -8,7 +8,7 @@ class BaseClassifier:
     def get_params(self):
         return self.model.get_params()
 
-    def _set_params(self, args):
+    def set_params(self, args):
         self.model.set_params(**args)
         return self
 

@@ -43,9 +43,9 @@ class Pipeline:
                  fast_run=False,
 
                  # Data Processing
-                 num_cols=[],
-                 date_cols=[],
-                 cat_cols=[],
+                 num_cols=None,
+                 date_cols=None,
+                 cat_cols=None,
                  missing_values='interpolate',
                  outlier_removal='clip',
                  z_score_threshold=4,
@@ -71,8 +71,8 @@ class Pipeline:
                  store_models=True,
 
                  # Grid Search
+                 grid_search_type='optuna',
                  grid_search_iterations=3,
-                 use_halving=True,
 
                  # Production
                  custom_code='',
@@ -138,8 +138,8 @@ class Pipeline:
         self.normalize = normalize
         self.shuffle = shuffle
         self.cvSplits = cv_splits
+        self.gridSearchType = grid_search_type
         self.gridSearchIterations = grid_search_iterations
-        self.useHalvingGridSearch = use_halving
         self.plotEDA = plot_eda
         self.processData = process_data
         self.validateResults = validate_result
@@ -238,7 +238,8 @@ class Pipeline:
             except:
                 continue
 
-    def _sort_results(self, results):
+    @staticmethod
+    def _sort_results(results):
         results['worst_case'] = results['mean_objective'] - results['std_objective']
         return results.sort_values('worst_case', ascending=False)
 
@@ -253,7 +254,7 @@ class Pipeline:
         results = self._sort_results(results[results['dataset'] == feature_set])
 
         # Warning for unoptimized results
-        if 'Hyperparameter Opt' not in results['type'].values:
+        if 'Hyper Parameter' not in results['type'].values:
             warnings.warn('Hyperparameters not optimized for this combination')
 
         # Parse & return best parameters (regardless of if it's optimized)
@@ -357,12 +358,14 @@ class Pipeline:
                         scaler = StandardScaler()
                         X[normalizeFeatures] = scaler.fit_transform(X[normalizeFeatures])
                         pickle.dump(scaler,
-                                    open(self.mainDir + 'Features/Scaler_%s_%i.pickle' % (feature_set, self.version), 'wb'))
+                                    open(self.mainDir + 'Features/Scaler_%s_%i.pickle' % (feature_set, self.version),
+                                         'wb'))
                         if self.mode == 'regression':
                             oScaler = StandardScaler()
                             Y[self.target] = oScaler.fit_transform(Y)
                             pickle.dump(oScaler,
-                                        open(self.mainDir + 'Features/OScaler_%s_%i.pickle' % (feature_set, self.version),
+                                        open(self.mainDir + 'Features/OScaler_%s_%i.pickle' % (
+                                            feature_set, self.version),
                                              'wb'))
 
                     # Sequence if necessary
@@ -575,15 +578,12 @@ class Pipeline:
         # Raise error if nothing is returned
         raise NotImplementedError('Hyperparameter tuning not implemented for ', type(model).__name__)
 
-    def grid_search(self, model=None, feature_set=None, params=None):
+    def grid_search(self, model=None, feature_set=None, parameter_set=None):
         """
         Runs a grid search. By default, takes the self.results, and runs for the top 3 optimizations.
         There is the option to provide a model & feature_set, but both have to be provided. In this case,
         the model & data set combination will be optimized.
-        :param model:
-        :param params:
-        :param feature_set:
-        :return:
+        Implemented types, Base, Halving, Optuna
         """
         assert model is not None and feature_set is not None or model == feature_set, \
             'Model & feature_set need to be either both None or both provided.'
@@ -601,215 +601,122 @@ class Pipeline:
                 self.results['model'] == type(model).__name__,
                 self.results['data_version'] == self.version,
             )]
-            results = self._sortResults(results[results['dataset'] == feature_set])
+            results = self._sort_results(results[results['dataset'] == feature_set])
 
             # Check if exists and load
-            if ('Hyperparameter Opt' == results['type']).any():
+            if ('Hyper Parameter' == results['type']).any():
                 print('[AutoML] Loading optimization results.')
-                hyperOptResults = results[results['type'] == 'Hyperparameter Opt']
-                params = Utils.parseJson(hyperOptResults.iloc[0]['params'])
+                hyper_opt_results = results[results['type'] == 'Hyper Parameter']
+                params = Utils.parse_json(hyper_opt_results.iloc[0]['params'])
 
             # Or run
             else:
                 # Parameter check
-                if params is None:
-                    params = self._getHyperParams(model)
-
-                # Run Grid Search
-                if self.useHalvingGridSearch:
-                    gridSearchResults = self._sortResults(
-                        self._gridSearchIterationHalvingCV(model, params, feature_set))
-                else:
-                    gridSearchResults = self._sortResults(self._gridSearchIteration(model, params, feature_set))
+                if parameter_set is None:
+                    parameter_set = self._get_hyper_params(model)
+                    
+                # Run grid search
+                grid_search_results = self._sort_results(self._grid_search_iteration(model, parameter_set, feature_set))
 
                 # Store results
-                gridSearchResults['model'] = type(model).__name__
-                gridSearchResults['data_version'] = self.version
-                gridSearchResults['dataset'] = feature_set
-                gridSearchResults['type'] = 'Hyperparameter Opt'
-                self.results = self.results.append(gridSearchResults)
+                grid_search_results['model'] = type(model).__name__
+                grid_search_results['data_version'] = self.version
+                grid_search_results['dataset'] = feature_set 
+                grid_search_results['type'] = 'Hyper Parameter'
+                self.results = self.results.append(grid_search_results)
                 self.results.to_csv(self.mainDir + 'Results.csv', index=False)
 
                 # Get params for validation
-                params = Utils.parseJson(results.iloc[0]['params'])
+                params = Utils.parse_json(grid_search_results.iloc[0]['params'])
 
             # Validate
-            self._validateResult(model, params, feature_set)
+            self._validate_result(model, params, feature_set)
             return
 
-        # If arguments aren't provided
+        # If arguments aren't provided, run through promising models
         models = self.Modelling.return_models()
         results = self._sort_results(self.results[np.logical_and(
             self.results['type'] == 'Initial modelling',
             self.results['data_version'] == self.version,
         )])
-
-        # TODO Check if model is not already opitmized for a feature set
-        completedModels = list(set(self.results[np.logical_and(
-            self.results['type'] == 'Hyperparameter Opt',
-            self.results['data_version'] == self.version,
-        )]))
         for iteration in range(self.gridSearchIterations):
             # Grab settings
             settings = results.iloc[iteration]
             model = models[[i for i in range(len(models)) if type(models[i]).__name__ == settings['model']][0]]
-            featureSet = settings['dataset']
+            feature_set = settings['dataset']
 
             # Check whether exists
-            modelResults = self.results[np.logical_and(
+            model_results = self.results[np.logical_and(
                 self.results['model'] == type(model).__name__,
                 self.results['data_version'] == self.version,
             )]
-            modelResults = self._sort_results(modelResults[modelResults['dataset'] == featureSet])
+            model_results = self._sort_results(model_results[model_results['dataset'] == feature_set])
 
             # If exists
-            if ('Hyperparameter Opt' == modelResults['type']).any():
-                hyperOptRes = modelResults[modelResults['type'] == 'Hyperparameter Opt']
-                params = Utils.parseJson(hyperOptRes.iloc[0]['params'])
+            if ('Hyper Parameter' == model_results['type']).any():
+                hyper_opt_res = model_results[model_results['type'] == 'Hyper Parameter']
+                params = Utils.parse_json(hyper_opt_res.iloc[0]['params'])
 
             # Else run
             else:
-                params = self._getHyperParams(model)
-                if self.useHalvingGridSearch:
-                    gridSearchResults = self._sortResults(self._gridSearchIterationHalvingCV(model, params, featureSet))
-                else:
-                    gridSearchResults = self._sortResults(self._gridSearchIteration(model, params, featureSet))
+                # Get params
+                params = self._get_hyper_params(model)
+
+                grid_search_results = self._sort_results(self._grid_search_iteration(model, params, feature_set))
 
                 # Store
-                gridSearchResults['model'] = type(model).__name__
-                gridSearchResults['data_version'] = self.version
-                gridSearchResults['dataset'] = featureSet
-                gridSearchResults['type'] = 'Hyperparameter Opt'
-                self.results = self.results.append(gridSearchResults)
+                grid_search_results['model'] = type(model).__name__
+                grid_search_results['data_version'] = self.version
+                grid_search_results['dataset'] = feature_set
+                grid_search_results['type'] = 'Hyper Parameter'
+                self.results = self.results.append(grid_search_results)
                 self.results.to_csv(self.mainDir + 'Results.csv', index=False)
-                params = Utils.parseJson(gridSearchResults.iloc[0]['params'])
+                params = Utils.parseJson(grid_search_results.iloc[0]['params'])
 
             # Validate
             if self.validateResults:
-                self._validate_result(model, params, featureSet)
+                self._validate_result(model, params, feature_set)
 
-    def _grid_search_teration(self, model, params, feature_set):
-        # todo deprecate
+    def _grid_search_iteration(self, model, params, feature_set):
         """
         INTERNAL | Grid search for defined model, parameter set and feature set.
         """
-        print('\n[AutoML] Starting Hyperparameter Optimization for %s on %s features (%i samples, %i features)' %
+        print('\n[AutoML] Starting Hyper Parameter Optimization for %s on %s features (%i samples, %i features)' %
               (type(model).__name__, feature_set, len(self.X), len(self.colKeep[feature_set])))
 
         # Select data
-        X, Y = self.X[self.colKeep[feature_set]], self.Y
+        x, y = self.X[self.colKeep[feature_set]], self.Y
 
         # Normalize Feature Set (the input remains original)
         if self.normalize:
-            normalizeFeatures = [k for k in self.colKeep[feature_set] if k not in self.dateCols + self.catCols]
+            features_to_normalize = [k for k in self.colKeep[feature_set] if k not in self.dateCols + self.catCols]
             scaler = pickle.load(
                 open(self.mainDir + 'Features/Scaler_%s_%i.pickle' % (feature_set, self.version), 'rb'))
-            X[normalizeFeatures] = scaler.transform(X[normalizeFeatures])
+            x[features_to_normalize] = scaler.transform(x[features_to_normalize])
             if self.mode == 'regression':
-                oScaler = pickle.load(
+                output_scaler = pickle.load(
                     open(self.mainDir + 'Features/OScaler_%s_%i.pickle' % (feature_set, self.version), 'rb'))
-                Y = oScaler.transform(Y)
+                y = output_scaler.transform(y)
 
-        # Run for regression (different Cross-Validation & worst case (MAE vs ACC))
+        # Cross-Validator
         if self.mode == 'regression':
-            gridSearch = BaseGridSearch(model, params,
-                                    cv=KFold(n_splits=self.cvSplits),
-                                    scoring=self.objective)
-            results = gridSearch.fit(X, Y)
-            results['worst_case'] = results['mean_objective'] + results['std_objective']
-            results = results.sort_values('worst_case')
-
-        # run for classification
+            cv = KFold(n_splits=self.cvSplits, shuffle=self.shuffle)
         elif self.mode == 'classification':
-            gridSearch = BaseGridSearch(model, params,
-                                    cv=StratifiedKFold(n_splits=self.cvSplits),
-                                    scoring=self.objective)
-            results = gridSearch.fit(X, Y)
-            results['worst_case'] = results['mean_objective'] - results['std_objective']
-            results = results.sort_values('worst_case', ascending=False)
+            cv = StratifiedKFold(n_splits=self.cvSplits, shuffle=self.shuffle)
 
-        return results
-
-    def _grid_search_iteration_halving_cv(self, model, params, feature_set):
-        """
-        Grid search for defined model, parameter set and feature set.
-        Contrary to normal function, uses Scikit-Learns HalvingRandomSearchCV. Special halvign algo
-        that uses subsets of data for early elimination. Speeds up significantly :)
-        """
-        from sklearn.model_selection import HalvingRandomSearchCV
-        print(
-            '\n[AutoML] Starting Hyperparameter Optimization (halving) for %s on %s features (%i samples, %i features)' %
-            (type(model).__name__, feature_set, len(self.X), len(self.colKeep[feature_set])))
-
-        # Select data
-        X, Y = self.X[self.colKeep[feature_set]], self.Y.values.ravel()
-
-        # Normalize Feature Set (the input remains original)
-        if self.normalize:
-            normalizeFeatures = [k for k in self.colKeep[feature_set] if k not in self.dateCols + self.catCols]
-            scaler = pickle.load(
-                open(self.mainDir + 'Features/Scaler_%s_%i.pickle' % (feature_set, self.version), 'rb'))
-            X[normalizeFeatures] = scaler.transform(X[normalizeFeatures])
-            if self.mode == 'regression':
-                oScaler = pickle.load(
-                    open(self.mainDir + 'Features/OScaler_%s_%i.pickle' % (feature_set, self.version), 'rb'))
-                Y = oScaler.transform(Y)
-
-        # Specify Halving Resource
-        resource = 'n_samples'
-        max_resources = 'auto'
-        min_resources = int(0.2 * len(X)) if len(X) > 5000 else len(X)
-        if model.__module__ == 'catboost.core':
-            resource = 'n_estimators'
-            max_resources = 3000
-            min_resources = 250
-        if model.__module__ == 'sklearn.ensemble._bagging' or model.__module__ == 'xgboost.sklearn' \
-                or model.__module__ == 'lightgbm.sklearn' or model.__module__ == 'sklearn.ensemble._forest':
-            resource = 'n_estimators'
-            max_resources = 1500
-            min_resources = 50
-
-        # Optimization
-        if self.mode == 'regression':
-            gridSearch = HalvingRandomSearchCV(model, params,
-                                               resource=resource,
-                                               n_candidates=200,
-                                               max_resources=max_resources,
-                                               min_resources=min_resources,
-                                               cv=KFold(n_splits=self.cvSplits),
-                                               scoring=self.objective,
-                                               factor=3, n_jobs=mp.cpu_count() - 1, verbose=self.verbose)
-            gridSearch.fit(X, Y)
-            scikitResults = pd.DataFrame(gridSearch.cv_results_)
-            results = pd.DataFrame()
-            results[['params', 'mean_objective', 'std_objective', 'mean_time', 'std_time']] = scikitResults[
-                ['params', 'mean_test_score', 'std_test_score', 'mean_fit_time', 'std_fit_time']]
-            results['worst_case'] = - results['mean_objective'] - results['std_objective']
-            results = results.sort_values('worst_case')
-
-        if self.mode == 'classification':
-            gridSearch = HalvingRandomSearchCV(model, params,
-                                               resource=resource,
-                                               max_resources=max_resources,
-                                               min_resources=min_resources,
-                                               n_candidates=250,
-                                               cv=StratifiedKFold(n_splits=self.cvSplits),
-                                               scoring=self.objective,
-                                               factor=3, n_jobs=mp.cpu_count() - 1, verbose=self.verbose)
-            gridSearch.fit(X, Y)
-            scikitResults = pd.DataFrame(gridSearch.cv_results_)
-            results = pd.DataFrame()
-            results[['params', 'mean_objective', 'std_objective', 'mean_time', 'std_time']] = scikitResults[
-                ['params', 'mean_test_score', 'std_test_score', 'mean_fit_time', 'std_fit_time']]
-            results['worst_case'] = results['mean_objective'] - results['std_objective']
-            results = results.sort_values('worst_case')
-
-        # Update resource in params
-        if resource != 'n_samples':
-            for i in range(len(results)):
-                results.loc[results.index[i], 'params'][resource] = max_resources
-
-        return results
+        # Select right hyperparameter optimizer
+        if self.gridSearchType == 'Base':
+            grid_search = BaseGridSearch(model, params=params, cv=cv, scoring=self.scorer, verbose=self.verbose)
+        elif self.gridSearchType == 'Halving':
+            grid_search = HalvingGridSearch(model, params=params, cv=cv, scoring=self.scorer, verbose=self.verbose)
+        elif self.gridSearchType == 'Optuna':
+            grid_search = OptunaGridSearch(model, params=params, cv=cv, scoring=self.scorer, verbose=self.verbose)
+        else:
+            raise NotImplementedError('Only Base, Halving and Optuna are implemented.')
+        # Get results
+        results = grid_search.fit(x, y)
+        results['worst_case'] = results['mean_objective'] - results['std_objective']
+        return results.sort_values('worst_case', ascending=False)
 
     def _create_stacking(self):
         # todo implement
@@ -819,7 +726,7 @@ class Pipeline:
         '''
         # First, the ideal dataset has to be chosen, we're restricted to a single one...
         results = self._sort_results(self.results[np.logical_and(
-            self.results['type'] == 'Hyperparameter Opt',
+            self.results['type'] == 'Hyper Parameter',
             self.results['data_version'] == self.version,
         )])
         feature_set = results['dataset'].value_counts()[0]
@@ -1129,11 +1036,11 @@ class Pipeline:
 
         # Clean data
         # todo change to transform
-        data = self.DataProcessing._cleanKeys(data)
-        data = self.DataProcessing._convertDataTypes(data)
-        data = self.DataProcessing._removeDuplicates(data)
-        data = self.DataProcessing._removeOutliers(data)
-        data = self.DataProcessing._removeMissingValues(data)
+        data = Utils.clean_keys(data)
+        data = self.DataProcessing._convert_data_types(data)
+        data = self.DataProcessing._remove_duplicates(data)
+        data = self.DataProcessing._remove_outliers(data)
+        data = self.DataProcessing._remove_missing_values(data)
         if data.astype('float32').replace([np.inf, -np.inf], np.nan).isna().sum().sum() != 0:
             raise ValueError('Data should not contain NaN or Infs after cleaning!')
 
