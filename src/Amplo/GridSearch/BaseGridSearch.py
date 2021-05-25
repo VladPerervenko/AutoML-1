@@ -10,12 +10,11 @@ from sklearn import metrics
 
 class BaseGridSearch:
 
-    def __init__(self, model, params, cv=None, scoring=metrics.SCORERS['accuracy'],
+    def __init__(self, model, params=None, cv=None, scoring=metrics.SCORERS['accuracy'],
                  verbose=0):
         """
         Basic exhaustive grid search.
         @param model: Model object to optimize
-        @param params:  Parameter set to optimize
         @param cv: Cross-Validator for scoring
         @param scoring: make_scorer for scoring
         """
@@ -28,24 +27,24 @@ class BaseGridSearch:
 
         # Checks
         assert model is not None, 'Model not provided'
-        assert isinstance(params, dict), 'Parameter set should be dictionary'
-        assert all([isinstance(x, list) for x in params.values()]), 'Parameter set dictionary needs to be filled ' \
-                                                                    'with lists '
+        assert isinstance(params, dict), 'Parameter set needs to be a dictionary'
+        assert all([isinstance(x, list) for x in params.values()]), 'Parameter set dictionary needs to be filled with' \
+                                                                    ' lists.'
         assert scoring in metrics.SCORERS.values(), 'Chose a scorer from sklearn.metrics.SCORERS'
         
-        # Initiate            
-        self.parsed_params = []
+        # Initiate
+        self.parsedParams = []
         self.result = []
         self._parse_params()
         self.best = [None, None]    # Mean score, Std score
 
     def _parse_params(self):
         k, v = zip(*self.params.items())
-        self.parsed_params = [dict(zip(k, v)) for v in itertools.product(*self.params.values())]
+        self.parsedParams = [dict(zip(k, v)) for v in itertools.product(*self.params.values())]
         print('[GridSearch] %i folds with %i parameter combinations, %i runs.' % (
             self.cv.n_splits,
-            len(self.parsed_params),
-            len(self.parsed_params) * self.cv.n_splits))
+            len(self.parsedParams),
+            len(self.parsedParams) * self.cv.n_splits))
 
     def fit(self, x, y):
         # Convert to Numpy
@@ -55,7 +54,7 @@ class BaseGridSearch:
             y = np.array(y).reshape((-1))
 
         # Loop through parameters
-        for i, param in tqdm(enumerate(self.parsed_params)):
+        for i, param in tqdm(enumerate(self.parsedParams)):
             # print('[GridSearch] ', param)
             scoring = []
             timing = []
@@ -87,7 +86,7 @@ class BaseGridSearch:
             if self.verbose > 0:
                 print('[GridSearch][%s] Score: %.4f \u00B1 %.4f (in %.1f seconds) (Best score so-far: %.4f \u00B1 '
                       '%.4f) (%i / %i)' % (datetime.now().strftime('%H:%M'), np.mean(scoring), np.std(scoring),
-                                           np.mean(timing), self.best[0], self.best[1], i + 1, len(self.parsed_params)))
+                                           np.mean(timing), self.best[0], self.best[1], i + 1, len(self.parsedParams)))
             self.result.append({
                 'scoring': scoring,
                 'mean_objective': np.mean(scoring),
