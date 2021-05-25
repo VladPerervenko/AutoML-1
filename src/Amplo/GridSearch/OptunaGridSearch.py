@@ -146,7 +146,7 @@ class OptunaGridSearch(BaseGridSearch):
         raise NotImplementedError('Hyper parameter tuning not implemented for ', type(self.model).__name__)
 
     def get_callbacks(self):
-        if self.model
+        pass
 
     def fit(self, x, y):
         # Store
