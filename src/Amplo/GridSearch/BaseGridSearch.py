@@ -9,9 +9,9 @@ from sklearn.model_selection import KFold
 from sklearn.model_selection import StratifiedKFold
 
 
-class GridSearch:
+class BaseGridSearch:
 
-    def __init__(self, model, params, cv=None, scoring=metrics.r2_score):
+    def __init__(self, model, params, cv=None, scoring=metrics.SCORERS['accuracy']):
         """
         Basic exhaustive grid search.
         @param model: Model object to optimize
@@ -22,11 +22,14 @@ class GridSearch:
         # Args
         self.model = model
         self.params = params
-        if cv is None:
-            self.cv = StratifiedKFold(n_splits=3)
-        else:
-            self.cv = cv
+        self.cv = cv
         self.scoring = scoring
+
+        # Checks
+        assert model is not None, 'Model not provided'
+        assert isinstance(params, dict), 'Parameter set should be dictionary'
+        assert all([isinstance(x, list) for x in params.values()]), 'Parameter set dictionairy needs to be filled ' \
+                                                                    'with lists '
         
         # Initiate            
         self.parsed_params = []
