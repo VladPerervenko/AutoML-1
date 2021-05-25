@@ -76,12 +76,8 @@ class BaseGridSearch:
                 timing.append(time.time() - t)
 
             # Compare scores
-            if scoring == metrics.mean_absolute_error or scoring == metrics.mean_squared_error:
-                if np.mean(scoring) + np.std(scoring) <= self.best[0] + self.best[1]:
-                    self.best = [np.mean(scoring), np.std(scoring)]
-            else:
-                if np.mean(scoring) - np.std(scoring) > self.best[0] - self.best[1]:
-                    self.best = [np.mean(scoring), np.std(scoring)]
+            if np.mean(scoring) - np.std(scoring) > self.best[0] - self.best[1]:
+                self.best = [np.mean(scoring), np.std(scoring)]
 
             if self.verbose > 0:
                 print('[GridSearch][%s] Score: %.4f \u00B1 %.4f (in %.1f seconds) (Best score so-far: %.4f \u00B1 '
