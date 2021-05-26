@@ -2,8 +2,10 @@ class BaseClassifier:
 
     def __init__(self, model, params):
         self.defaultParams = params
-        self.model = model(**params)
+        self.model = model
+        self.model.set_params(**params)
         self.hasPredictProba = hasattr(model, 'predict_proba')
+        self.trained = False
 
     def get_params(self):
         return self.model.get_params()
@@ -13,7 +15,9 @@ class BaseClassifier:
         return self
 
     def predict(self, x):
-        return self.model.predict(x)
+        prediction = self.model.predict(x)
+        self.trained = True
+        return prediction
 
     def predict_proba(self, x):
         if self.hasPredictProba:
