@@ -13,7 +13,7 @@ class XGBClassifier:
         """
         # Parameters
         self.model = None
-        self.params = None
+        self.params = params if params is not None else {}
         self.callbacks = None
         self.trained = False
 
@@ -31,7 +31,7 @@ class XGBClassifier:
                                d_train,
                                evals=[(d_test, 'validation')],
                                verbose_eval=0,
-                               callbacks=[self.callback],
+                               callbacks=[self.callbacks],
                                early_stopping_rounds=100,
                                )
         self.trained = True

@@ -15,9 +15,7 @@ class BaseClassifier:
         return self
 
     def predict(self, x):
-        prediction = self.model.predict(x)
-        self.trained = True
-        return prediction
+        return self.model.predict(x)
 
     def predict_proba(self, x):
         if self.hasPredictProba:
@@ -28,4 +26,5 @@ class BaseClassifier:
 
     def fit(self, x, y):
         self.model.fit(x, y)
+        self.trained = True
         return self

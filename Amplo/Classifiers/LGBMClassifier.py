@@ -12,7 +12,7 @@ class LGBMClassifier:
         """
         # Parameters
         self.model = None
-        self.params = None
+        self.params = params if params is not None else {}
         self.callbacks = None
         self.trained = False
 
