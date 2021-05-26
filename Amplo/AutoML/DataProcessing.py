@@ -2,7 +2,7 @@ import re
 import inspect
 import numpy as np
 import pandas as pd
-from AutoML.src.Utils import clean_keys
+from ..Utils import clean_keys
 
 
 class DataProcessing:
