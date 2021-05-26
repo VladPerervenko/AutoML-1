@@ -1,5 +1,5 @@
 from .Pipeline import Pipeline
-from .Classifiers import *
-from .AutoML import *
+import Classifiers
+# from .AutoML import *
 from .GridSearch import *
 
