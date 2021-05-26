@@ -13,20 +13,6 @@ def boolean_input(question):
         return boolean_input(question)
 
 
-def notification():
-    # import requests
-    # oAuthToken = 'xoxb-1822915844353-1822989373697-zsFM6CuC6VGTxBjHUcdZHSdJ'
-    # url = 'https://slack.com/api/chat.postMessage'
-    # data = {
-    #     "token": oAuthToken,
-    #     "channel": "automl",
-    #     "text": message,
-    #     "username": "AutoML",
-    # }
-    # requests.post(url, data=data)
-    pass
-
-
 def clean_keys(data):
     # Clean Keys
     new_keys = {}
