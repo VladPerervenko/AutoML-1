@@ -294,7 +294,10 @@ class Pipeline:
     def _eda(self):
         if self.plotEDA:
             print('[AutoML] Starting Exploratory Data Analysis')
-            self.eda = DataExploring(self.X, Y=self.Y, folder=self.mainDir, version=self.version)
+            self.eda = DataExploring(self.X, y=self.Y,
+                                     mode=self.mode,
+                                     folder=self.mainDir,
+                                     version=self.version)
 
     def _data_processing(self, data):
         # Load if possible

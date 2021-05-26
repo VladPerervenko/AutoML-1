@@ -1,6 +1,8 @@
 import copy
+import numpy as np
 import pandas as pd
 import lightgbm as lgb
+from sklearn.metrics import f1_score
 from sklearn.model_selection import train_test_split
 
 
@@ -8,30 +10,43 @@ class LGBMClassifier:
 
     def __init__(self, params=None):
         """
-        Light GBM wrapper. Uses Optuna's alternative
+        Light GBM wrapper
         """
         # Parameters
         self.model = None
-        self.params = params if params is not None else {}
+        self.defaultParams = {
+            'verbosity': 0,
+            'force_col_wise': True
+        }
+        self.params = params if params is not None else self.defaultParams
+        for key in [k for k in self.defaultParams if k not in self.params]:
+            self.params[key] = self.defaultParams[key]
         self.callbacks = None
         self.trained = False
 
         # Parse params
-        self.set_params(params)
+        self.set_params(self.params)
 
     def fit(self, x, y):
         # Split & Convert data
         train_x, test_x, train_y, test_y = train_test_split(x, y, test_size=0.1)
         d_train = lgb.Dataset(train_x, label=train_y)
-        d_test = lgb.Dataset(test_y, label=test_y)
+        d_test = lgb.Dataset(test_x, label=test_y)
+
+        # Set Objective
+        if len(np.unique(y)) == 2:
+            self.params['objective'] = 'binary'
+        else:
+            self.params['objective'] = 'multiclass'
+            self.params['num_class'] = len(np.unique(y))
 
         # Model training
-        best_params, history = dict(), list()
         self.model = lgb.train(self.params,
                                d_train,
-                               valid_sets=[d_test],
+                               valid_sets=d_test,
+                               feval=self.eval,
                                verbose_eval=0,
-                               callbacks=[self.callbacks],
+                               callbacks=[self.callbacks] if self.callbacks is not None else None,
                                early_stopping_rounds=100,
                                )
         self.trained = True
@@ -71,3 +86,20 @@ class LGBMClassifier:
         if self.callbacks is not None:
             params['callbacks'] = self.callbacks
         return params
+
+    def eval(self, prediction, d_train):
+        if self.params['objective'] == 'binary':
+            average = 'binary'
+        else:
+            average = 'micro'
+        target = d_train.get_label()
+        weight = d_train.get_weight()
+        classes = len(np.unique(target))
+        if classes > 2:
+            prediction = prediction.reshape((-1, classes))
+            prediction = np.argmax(prediction, axis=1)
+        assert prediction.shape == target.shape
+        return "f1", f1_score(target, prediction,
+                              sample_weight=weight,
+                              average=average), True
+

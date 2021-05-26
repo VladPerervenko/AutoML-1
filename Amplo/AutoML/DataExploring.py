@@ -19,6 +19,7 @@ class DataExploring:
 
     def __init__(self, data,
                  y=None,
+                 mode='regression',
                  plot_time_plots=True,
                  plot_box_plots=False,
                  plot_missing_values=True,
@@ -39,7 +40,8 @@ class DataExploring:
         """
         Doing all the fun EDA in an automated manner :)
         """
-        assert isinstance(data, pd.DataFrame)
+        if type(data) != pd.DataFrame:
+            data = pd.DataFrame(data=data, columns=['Feature_%i' % i for i in range(data.shape[1])])
 
         # Running booleans
         self.plotTimePlots = plot_time_plots
@@ -55,21 +57,11 @@ class DataExploring:
         # Register data
         self.data = data.astype('float32').fillna(0)
         if y is not None:
-            assert isinstance(y, pd.DataFrame) or isinstance(y, pd.Series)
-            if isinstance(y, pd.DataFrame):
+            if type(y) == pd.DataFrame:
                 y = y[y.keys()[0]]
+            if type(y) != pd.Series:
+                y = pd.Series(y)
             self.Y = y.astype('float32').fillna(0)
-            if self.Y.nunique() == 2:
-                print('[AutoML] Mode set to classification.')
-                self.mode = 'classification'
-                if set(self.Y.values) != {0, 1}:
-                    assert 1 in self.Y.values, 'Ambiguous classes (either {0, 1} or {-1, 1})'
-                    self.Y.loc[self.Y.values != 1] = 0
-            else:
-                print('[AutoML] Mode set to regression.')
-                self.mode = 'regression'
-        else:
-            self.mode = None
 
         # General settings
         self.seasonPeriods = season_periods
@@ -78,6 +70,7 @@ class DataExploring:
         self.lags = lags                    # Correlations
 
         # Storage settings
+        self.mode = mode
         self.tag = pre_tag
         self.version = version if version is not None else 0
         self.folder = folder if folder == '' or folder[-1] == '/' else folder + '/'
@@ -246,8 +239,8 @@ class DataExploring:
     def co_linearity(self):
         if self.plotCoLinearity:
             # Create folder
-            if not os.path.exists(self.folder + 'CoLinearity/v%i/'):
-                os.makedirs(self.folder + 'CoLinearity/v%i/')
+            if not os.path.exists(self.folder + 'CoLinearity/v%i/' % self.version):
+                os.makedirs(self.folder + 'CoLinearity/v%i/' % self.version)
 
             # Skip if existing
             if self.tag + 'MinimumRepresentation.png' in os.listdir(self.folder + 'Colinearity/v%i/' % self.version):
@@ -400,6 +393,7 @@ class DataExploring:
                 plt.close(fig)
 
     def shap(self, args=None):
+        args = args if args is not None else {}
         if self.plotFeatureImportance:
             # Create folder
             if not os.path.exists(self.folder + 'Features/v%i/' % self.version):
@@ -426,6 +420,7 @@ class DataExploring:
             fig.savefig(self.folder + 'Features/v%i/' % self.version + self.tag + 'SHAP.png', format='png', dpi=300)
 
     def feature_ranking(self, **args):
+        args = args if args is not None else {}
         if self.plotFeatureImportance:
             # Create folder
             if not os.path.exists(self.folder + 'Features/v%i/' % self.version):
@@ -476,7 +471,7 @@ class DataExploring:
             pp_score = ppscore.predictors(data, 'target').sort_values('ppscore')
 
             # Plot
-            fig, ax = plt.subplots(figsize=[4, 6], constrained_layout=True)
+            fig, ax = plt.subplots(figsize=[4, 6])
             plt.subplots_adjust(left=0.5, top=1, bottom=0)
             ax.spines['right'].set_visible(False)
             ax.spines['bottom'].set_visible(False)

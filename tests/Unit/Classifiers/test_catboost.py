@@ -26,7 +26,7 @@ class TestCatBoostClassifier(unittest.TestCase):
         model.fit(self.x.to_numpy(), self.y.to_numpy())
 
     def test_trained_attr(self):
-        model = CatBoostClassifier
+        model = CatBoostClassifier()
         assert hasattr(model, 'trained')
         assert model.trained is False
         model.fit(self.x, self.y)

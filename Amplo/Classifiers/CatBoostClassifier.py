@@ -1,5 +1,5 @@
 import catboost
-from Amplo.Classifiers.BaseClassifier import BaseClassifier
+from Amplo.Classifiers import BaseClassifier
 
 
 class CatBoostClassifier(BaseClassifier):

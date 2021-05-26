@@ -13,12 +13,18 @@ class XGBClassifier:
         """
         # Parameters
         self.model = None
-        self.params = params if params is not None else {}
+        self.defaultParams = {
+            'verbosity': 0,
+            'use_label_encoder': False
+        }
+        self.params = params if params is not None else self.defaultParams
+        for key in [k for k in self.defaultParams if k not in self.params]:
+            self.params[key] = self.defaultParams[key]
         self.callbacks = None
         self.trained = False
 
         # Parse params
-        self.set_params(params)
+        self.set_params(self.params)
 
     def fit(self, x, y):
         # Split & Convert data
@@ -31,7 +37,7 @@ class XGBClassifier:
                                d_train,
                                evals=[(d_test, 'validation')],
                                verbose_eval=0,
-                               callbacks=[self.callbacks],
+                               callbacks=[self.callbacks] if self.callbacks is not None else None,
                                early_stopping_rounds=100,
                                )
         self.trained = True

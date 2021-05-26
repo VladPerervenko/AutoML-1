@@ -26,7 +26,7 @@ class TestLGBMClassifier(unittest.TestCase):
         model.fit(self.x.to_numpy(), self.y.to_numpy())
 
     def test_trained_attr(self):
-        model = LGBMClassifier
+        model = LGBMClassifier()
         assert hasattr(model, 'trained')
         assert model.trained is False
         model.fit(self.x, self.y)

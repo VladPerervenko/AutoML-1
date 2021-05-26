@@ -3,7 +3,7 @@ from sklearn.datasets import load_iris
 from Amplo.Classifiers import XGBClassifier
 
 
-class TestCatBoostClassifier(unittest.TestCase):
+class TestXGBClassifier(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -26,8 +26,8 @@ class TestCatBoostClassifier(unittest.TestCase):
         model.fit(self.x.to_numpy(), self.y.to_numpy())
 
     def test_trained_attr(self):
-        model = XGBClassifier
-        assert hasattr(model, 'trained')
+        model = XGBClassifier()
+        assert hasattr(model, 'trained'), 'Attribute missing'
         assert model.trained is False
         model.fit(self.x, self.y)
         assert model.trained is True
