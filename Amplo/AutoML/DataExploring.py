@@ -41,7 +41,7 @@ class DataExploring:
         Doing all the fun EDA in an automated manner :)
         """
         if type(data) != pd.DataFrame:
-            data = pd.DataFrame(data=data, columns=['Feature_%i' % i for i in range(data.shape[1])])
+            data = pd.DataFrame(data=data, columns=['Feature_{}'.format(i) for i in range(data.shape[1])])
 
         # Running booleans
         self.plotTimePlots = plot_time_plots
@@ -139,25 +139,25 @@ class DataExploring:
                 os.mkdir(self.folder + 'MissingValues/')
 
             # Skip if exists
-            if self.tag + 'v%i.png' % self.version in os.listdir(self.folder + 'MissingValues/'):
+            if self.tag + 'v{}.png'.format(self.version) in os.listdir(self.folder + 'MissingValues/'):
                 return
 
             # Plot
             ax = missingno.matrix(self.data, figsize=[24, 16])
             fig = ax.get_figure()
-            fig.savefig(self.folder + 'MissingValues/v%i.png' % self.version)
+            fig.savefig(self.folder + 'MissingValues/v{}.png'.format(self.version))
 
     def box_plots(self):
         if self.plotBoxPlots:
             # Create folder
-            if not os.path.exists(self.folder + 'BoxPlots/v%i/' % self.version):
-                os.makedirs(self.folder + 'BoxPlots/v%i/' % self.version)
+            if not os.path.exists(self.folder + 'BoxPlots/v{}/'.format(self.version)):
+                os.makedirs(self.folder + 'BoxPlots/v{}/'.format(self.version))
 
             # Iterate through vars
             for key in tqdm(self.data.keys()):
 
                 # Skip if existing
-                if self.tag + key + '.png' in os.listdir(self.folder + 'BoxPlots/v%i/' % self.version):
+                if self.tag + key + '.png' in os.listdir(self.folder + 'BoxPlots/v{}/'.format(self.version)):
                     continue
 
                 # Figure prep
@@ -175,15 +175,15 @@ class DataExploring:
                     plt.boxplot(self.data[key])
 
                 # Store & Close
-                fig.savefig(self.folder + 'BoxPlots/v%i/' % self.version + self.tag + key + '.png',
+                fig.savefig(self.folder + 'BoxPlots/v{}/'.format(self.version) + self.tag + key + '.png',
                             format='png', dpi=300)
                 plt.close()
 
     def time_plots(self):
         if self.plotTimePlots:
             # Create folder
-            if not os.path.exists(self.folder + 'TimePlots/v%i/' % self.version):
-                os.makedirs(self.folder + 'TimePlots/v%i/' % self.version)
+            if not os.path.exists(self.folder + 'TimePlots/v{}/'.format(self.version)):
+                os.makedirs(self.folder + 'TimePlots/v{}/'.format(self.version))
 
             # Set matplot limit
             matplotlib.use('Agg')
@@ -196,7 +196,7 @@ class DataExploring:
             # Iterate through features
             for key in tqdm(data.keys()):
                 # Skip if existing
-                if self.tag + key + '.png' in os.listdir(self.folder + 'TimePlots/v%i/' % self.version):
+                if self.tag + key + '.png' in os.listdir(self.folder + 'TimePlots/v{}/'.format(self.version)):
                     continue
 
                 # Figure preparation
@@ -212,7 +212,7 @@ class DataExploring:
                 plt.scatter(data.index, data[key], c=cm(nm_output), alpha=0.3)
 
                 # Store & Close
-                fig.savefig(self.folder + 'TimePlots/v%i/' % self.version + self.tag + key + '.png',
+                fig.savefig(self.folder + 'TimePlots/v{}/'.format(self.version) + self.tag + key + '.png',
                             format='png', dpi=100)
                 plt.close(fig)
 
@@ -225,7 +225,7 @@ class DataExploring:
             # Iterate through features
             for key in tqdm(self.data.keys()):
                 for period in self.seasonPeriods:
-                    if self.tag + key + '_v%i.png' % self.version in os.listdir(self.folder + 'Seasonality/'):
+                    if self.tag + key + '_v{}.png'.format(self.version) in os.listdir(self.folder + 'Seasonality/'):
                         continue
                     seasonality = STL(self.data[key], period=period).fit()
                     fig = plt.figure(figsize=[24, 16])
@@ -233,25 +233,26 @@ class DataExploring:
                     plt.plot(range(len(self.data)), seasonality)
                     plt.title(key + ', period=' + str(period))
                     fig.savefig(self.folder + 'Seasonality/' + self.tag + str(period)+'/'+key +
-                                '_v%i.png' % self.version, format='png', dpi=300)
+                                '_v{}.png'.format(self.version), format='png', dpi=300)
                     plt.close()
 
     def co_linearity(self):
         if self.plotCoLinearity:
             # Create folder
-            if not os.path.exists(self.folder + 'CoLinearity/v%i/' % self.version):
-                os.makedirs(self.folder + 'CoLinearity/v%i/' % self.version)
+            if not os.path.exists(self.folder + 'CoLinearity/v{}/'.format(self.version)):
+                os.makedirs(self.folder + 'CoLinearity/v{}/'.format(self.version))
 
             # Skip if existing
-            if self.tag + 'MinimumRepresentation.png' in os.listdir(self.folder + 'Colinearity/v%i/' % self.version):
+            if self.tag + 'MinimumRepresentation.png' in \
+                    os.listdir(self.folder + 'CoLinearity/v{}/'.format(self.version)):
                 return
 
             # Plot threshold matrix
             threshold = 0.95
             fig = plt.figure(figsize=[24, 16])
-            plt.title('Co-linearity matrix, threshold %.2f' % threshold)
+            plt.title('Co-linearity matrix, threshold {:.2f}'.format(threshold))
             sns.heatmap(abs(self.data.corr()) < threshold, annot=False, cmap='Greys')
-            fig.savefig(self.folder + 'CoLinearity/v%i/' % self.version + self.tag + 'Matrix.png',
+            fig.savefig(self.folder + 'CoLinearity/v{}/'.format(self.version) + self.tag + 'Matrix.png',
                         format='png', dpi=300)
 
             # Minimum representation
@@ -261,7 +262,7 @@ class DataExploring:
             minimal_rep = self.data.drop(self.data[col_drop], axis=1)
             fig = plt.figure(figsize=[24, 16])
             sns.heatmap(abs(minimal_rep.corr()) < threshold, annot=False, cmap='Greys')
-            fig.savefig(self.folder + 'CoLinearity/v%i/' % self.version + self.tag + 'Minimum_Representation.png',
+            fig.savefig(self.folder + 'CoLinearity/v{}/'.format(self.version) + self.tag + 'Minimum_Representation.png',
                         format='png', dpi=300)
 
     def differencing(self):
@@ -307,7 +308,7 @@ class DataExploring:
             # Iterate through features
             for key in tqdm(self.data.keys()):
                 # Skip if existing
-                if self.tag + key + '_differ_' + str(self.differ) + '_v%i.png' % self.version in \
+                if self.tag + key + '_differ_' + str(self.differ) + '_v{}.png'.format(self.version) in \
                         os.listdir(self.folder + 'Correlation/ACF/'):
                     continue
 
@@ -315,7 +316,7 @@ class DataExploring:
                 fig = plot_acf(diff_data[key], fft=True)
                 plt.title(key)
                 fig.savefig(self.folder + 'Correlation/ACF/' + self.tag + key + '_differ_' + str(self.differ) +
-                            '_v%i.png' % self.version, format='png', dpi=300)
+                            '_v{}.png'.format(self.version), format='png', dpi=300)
                 plt.close()
 
     def partial_auto_corr(self):
@@ -327,7 +328,7 @@ class DataExploring:
             # Iterate through features
             for key in tqdm(self.data.keys()):
                 # Skip if existing
-                if self.tag + key + '_differ_' + str(self.differ) + '_v%i.png' % self.version in \
+                if self.tag + key + '_differ_' + str(self.differ) + '_v{}.png'.format(self.version) in \
                         os.listdir(self.folder + 'EDA/Correlation/PACF/'):
                     continue
 
@@ -335,7 +336,7 @@ class DataExploring:
                 try:
                     fig = plot_pacf(self.data[key])
                     fig.savefig(self.folder + 'EDA/Correlation/PACF/' + self.tag + key + '_differ_' +
-                                str(self.differ) + '_v%i.png' % self.version, format='png', dpi=300)
+                                str(self.differ) + '_v{}.png'.format(self.version), format='png', dpi=300)
                     plt.title(key)
                     plt.close()
                 except Exception as e:
@@ -355,7 +356,7 @@ class DataExploring:
             # Iterate through features
             for key in tqdm(self.data.keys()):
                 # Skip if existing
-                if self.tag + key + '_differ_' + str(self.differ) + '_v%i.png' % self.version in \
+                if self.tag + key + '_differ_' + str(self.differ) + '_v{}.png'.format(self.version) in \
                         os.listdir(self.folder + folder):
                     continue
 
@@ -365,7 +366,7 @@ class DataExploring:
                     plt.xcorr(self.data[key], y, maxlags=self.lags)
                     plt.title(key)
                     fig.savefig(self.folder + folder + self.tag + key + '_differ_' + str(self.differ) +
-                                '_v%i.png' % self.version, format='png', dpi=300)
+                                '_v{}.png'.format(self.version), format='png', dpi=300)
                     plt.close()
                 except Exception as e:
                     raise ValueError(e)
@@ -373,13 +374,13 @@ class DataExploring:
     def scatters(self):
         if self.plotScatterPlots:
             # Create folder
-            if not os.path.exists(self.folder + 'Scatters/v%i/' % self.version):
-                os.makedirs(self.folder + 'Scatters/v%i/' % self.version)
+            if not os.path.exists(self.folder + 'Scatters/v{}/'.format(self.version)):
+                os.makedirs(self.folder + 'Scatters/v{}/'.format(self.version))
 
             # Iterate through features
             for key in tqdm(self.data.keys()):
                 # Skip if existing
-                if '{}{}.png'.format(self.tag, key) in os.listdir(self.folder + 'Scatters/v%i/' % self.version):
+                if '{}{}.png'.format(self.tag, key) in os.listdir(self.folder + 'Scatters/v{}/'.format(self.version)):
                     continue
 
                 # Plot
@@ -388,7 +389,7 @@ class DataExploring:
                 plt.ylabel(key)
                 plt.xlabel('Output')
                 plt.title('Scatter Plot ' + key + ' - Output')
-                fig.savefig(self.folder + 'Scatters/v%i/' % self.version + self.tag + key + '.png',
+                fig.savefig(self.folder + 'Scatters/v{}/'.format(self.version) + self.tag + key + '.png',
                             format='png', dpi=100)
                 plt.close(fig)
 
@@ -396,11 +397,11 @@ class DataExploring:
         args = args if args is not None else {}
         if self.plotFeatureImportance:
             # Create folder
-            if not os.path.exists(self.folder + 'Features/v%i/' % self.version):
-                os.makedirs(self.folder + 'Features/v%i/' % self.version)
+            if not os.path.exists(self.folder + 'Features/v{}/'.format(self.version)):
+                os.makedirs(self.folder + 'Features/v{}/'.format(self.version))
 
             # Skip if existing
-            if self.tag + 'SHAP.png' in os.listdir(self.folder + 'Features/v%i/' % self.version):
+            if self.tag + 'SHAP.png' in os.listdir(self.folder + 'Features/v{}/'.format(self.version)):
                 return
 
             # Create model
@@ -417,17 +418,17 @@ class DataExploring:
             fig = plt.figure(figsize=[8, 32])
             plt.subplots_adjust(left=0.4)
             shap.summary_plot(shap_values, self.data, plot_type='bar')
-            fig.savefig(self.folder + 'Features/v%i/' % self.version + self.tag + 'SHAP.png', format='png', dpi=300)
+            fig.savefig(self.folder + 'Features/v{}/'.format(self.version) + self.tag + 'SHAP.png', format='png', dpi=300)
 
     def feature_ranking(self, **args):
         args = args if args is not None else {}
         if self.plotFeatureImportance:
             # Create folder
-            if not os.path.exists(self.folder + 'Features/v%i/' % self.version):
-                os.mkdir(self.folder + 'Features/v%i/' % self.version)
+            if not os.path.exists(self.folder + 'Features/v{}/'.format(self.version)):
+                os.mkdir(self.folder + 'Features/v{}/'.format(self.version))
 
             # Skip if existing
-            if self.tag + 'RF.png' in os.listdir(self.folder + 'Features/v%i/' % self.version):
+            if self.tag + 'RF.png' in os.listdir(self.folder + 'Features/v{}/'.format(self.version)):
                 return
 
             # Create model
@@ -445,21 +446,21 @@ class DataExploring:
             ind = np.argsort(model.feature_importances_)
             plt.barh(list(self.data.keys()[ind])[-15:], width=model.feature_importances_[ind][-15:],
                      color='#2369ec')
-            fig.savefig(self.folder + 'Features/v%i/' % self.version + self.tag + 'RF.png', format='png', dpi=300)
+            fig.savefig(self.folder + 'Features/v{}/'.format(self.version) + self.tag + 'RF.png', format='png', dpi=300)
             plt.close()
 
             # Store results
             results = pd.DataFrame({'x': self.data.keys(), 'score': model.feature_importances_})
-            results.to_csv(self.folder + 'Features/v%i/' % self.version + self.tag + 'RF.csv')
+            results.to_csv(self.folder + 'Features/v{}/'.format(self.version) + self.tag + 'RF.csv')
 
     def predictive_power_score(self):
         if self.plotFeatureImportance:
             # Create folder
-            if not os.path.exists(self.folder + 'Features/v%i/' % self.version):
-                os.mkdir(self.folder + 'Features/v%i/' % self.version)
+            if not os.path.exists(self.folder + 'Features/v{}/'.format(self.version)):
+                os.mkdir(self.folder + 'Features/v{}/'.format(self.version))
 
             # Skip if existing
-            if self.tag + 'PPScore.png' in os.listdir(self.folder + 'Features/v%i/' % self.version):
+            if self.tag + 'PPScore.png' in os.listdir(self.folder + 'Features/v{}/'.format(self.version)):
                 return
 
             # Calculate PPS
@@ -477,8 +478,8 @@ class DataExploring:
             ax.spines['bottom'].set_visible(False)
             ax.spines['top'].set_visible(False)
             plt.barh(pp_score['x'][-15:], width=pp_score['ppscore'][-15:], color='#2369ec')
-            fig.savefig(self.folder + 'Features/v%i/' % self.version + self.tag + 'Ppscore.png', format='png', dpi=400)
+            fig.savefig(self.folder + 'Features/v{}/'.format(self.version) + self.tag + 'Ppscore.png', format='png', dpi=400)
             plt.close()
 
             # Store results
-            pp_score.to_csv(self.folder + 'Features/v%i/pp_score.csv' % self.version)
+            pp_score.to_csv(self.folder + 'Features/v{}/pp_score.csv'.format(self.version))
