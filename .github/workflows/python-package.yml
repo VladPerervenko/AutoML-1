@@ -24,5 +24,7 @@ jobs:
         USER: '__token__'
         PASS: ${{ secrets.PYPI_PASSWORD }}
       run: |
+        echo $USER
+        echo $PASS
         python setup.py sdist bdist_wheel
         twine upload -u $USER -p $PASS -r https://upload.pypi.org/legacy/ dist/*
