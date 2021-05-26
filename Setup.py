@@ -14,6 +14,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="Amplo",
+    # version='v0.1.0',
     version=amplo_version,
     author="Amplo GmbH",
     author_email="info@amplo.ch",
