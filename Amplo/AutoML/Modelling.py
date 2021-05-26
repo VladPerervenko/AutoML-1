@@ -8,6 +8,8 @@ import pandas as pd
 from sklearn.model_selection import KFold
 from sklearn.model_selection import StratifiedKFold
 from ..Classifiers.CatBoostClassifier import CatBoostClassifier
+from ..Classifiers.XGBClassifier import XGBClassifier
+from ..Classifiers.LGBMClassifier import LGBMClassifier
 from sklearn import linear_model
 from sklearn import ensemble
 from sklearn import svm
@@ -76,14 +78,14 @@ class Modelling:
                     models.append(svm.SVC(kernel='rbf'))
                 models.append(ensemble.BaggingClassifier())
                 models.append(ensemble.GradientBoostingClassifier())
-                # todo XG Boost
+                models.append(XGBClassifier())
 
             # The efficient ones
             else:
                 if not self.needsProba:
                     models.append(linear_model.RidgeClassifier())
                 models.append(ensemble.HistGradientBoostingClassifier())
-                # todo LGBM
+                models.append(LGBMClassifier())
 
             # And the multifaceted ones
             models.append(CatBoostClassifier())
@@ -108,7 +110,6 @@ class Modelling:
 
             # And the multifaceted ones
             # todo Catboost
-            # models.append(CatBoostClassifier())
             models.append(ensemble.RandomForestRegressor())
 
         # Filter predict_proba models
@@ -122,12 +123,14 @@ class Modelling:
         y = np.array(y).ravel()
 
         # Data
-        print('[Modelling] Splitting data (shuffle=%s, splits=%i, features=%i)' % (str(self.shuffle), self.cvSplits, len(x[0])))
+        print('[Modelling] Splitting data (shuffle=%s, splits=%i, features=%i)' %
+              (str(self.shuffle), self.cvSplits, len(x[0])))
 
         if self.store_results and 'Initial_Models.csv' in os.listdir(self.folder):
             results = pd.read_csv(self.folder + 'Initial_Models.csv')
         else:
-            results = pd.DataFrame(columns=['date', 'model', 'dataset', 'params', 'mean_objective', 'std_objective', 'mean_time', 'std_time'])
+            results = pd.DataFrame(columns=['date', 'model', 'dataset', 'params', 'mean_objective', 'std_objective',
+                                            'mean_time', 'std_time'])
 
         # Models
         self.models = self.return_models()

@@ -1,15 +1,14 @@
 import copy
 import pandas as pd
-import xgboost as xgb
+import lightgbm as lgb
 from sklearn.model_selection import train_test_split
 
 
-class XGBClassifier:
+class LGBMClassifier:
 
     def __init__(self, params=None):
         """
-        XG Boost wrapper
-        @param params: Model parameters
+        Light GBM wrapper. Uses Optuna's alternative
         """
         # Parameters
         self.model = None
@@ -23,15 +22,16 @@ class XGBClassifier:
     def fit(self, x, y):
         # Split & Convert data
         train_x, test_x, train_y, test_y = train_test_split(x, y, test_size=0.1)
-        d_train = xgb.DMatrix(train_x, label=train_y)
-        d_test = xgb.DMatrix(test_x, label=test_y)
+        d_train = lgb.Dataset(train_x, label=train_y)
+        d_test = lgb.Dataset(test_y, label=test_y)
 
         # Model training
-        self.model = xgb.train(self.params,
+        best_params, history = dict(), list()
+        self.model = lgb.train(self.params,
                                d_train,
-                               evals=[(d_test, 'validation')],
+                               valid_sets=[d_test],
                                verbose_eval=0,
-                               callbacks=[self.callback],
+                               callbacks=[self.callbacks],
                                early_stopping_rounds=100,
                                )
         self.trained = True
@@ -44,8 +44,8 @@ class XGBClassifier:
         # Convert if single column
         if len(x.shape) == 1:
             x = x.reshape((-1, 1))
-        # Convert to DMatrix
-        d_predict = xgb.DMatrix(x)
+        # Convert to Dataset
+        d_predict = lgb.Dataset(x)
         return self.model.predict(d_predict)
 
     def predict_proba(self, x):
@@ -57,7 +57,7 @@ class XGBClassifier:
         if len(x.shape) == 1:
             x = x.reshape((-1, 1))
         # Convert to DMatrix
-        d_predict = xgb.DMatrix(x)
+        d_predict = lgb.Dataset(x)
         self.model.predict_proba(d_predict)
 
     def set_params(self, params):
