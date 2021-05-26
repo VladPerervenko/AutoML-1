@@ -17,6 +17,7 @@ from sklearn.cluster import MiniBatchKMeans
 
 
 class FeatureProcessing:
+    # todo implement time budget
 
     def __init__(self,
                  max_lags=10,

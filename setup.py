@@ -1,21 +1,20 @@
 import setuptools
 import subprocess
-import os
 
-amplo_version = (
+
+version = (
     subprocess.run(["git", "describe", "--tags"], stdout=subprocess.PIPE)
     .stdout.decode("utf-8")
     .strip()
 )
-assert "." in amplo_version
+assert "." in version
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setuptools.setup(
     name="Amplo",
-    # version='v0.1.0',
-    version=amplo_version,
+    version=version,
     author="Amplo GmbH",
     author_email="info@amplo.ch",
     description="Fully automated end to end machine learning pipeline",
