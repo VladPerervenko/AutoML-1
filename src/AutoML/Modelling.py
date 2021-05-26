@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import KFold
 from sklearn.model_selection import StratifiedKFold
-from ..Classifiers.CatBoostClassifier import CatBoostClassifier
+from AutoML.src.Classifiers.CatBoostClassifier import CatBoostClassifier
 from sklearn import linear_model
 from sklearn import ensemble
 from sklearn import svm
