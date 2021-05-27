@@ -13,11 +13,11 @@ class TestDataExploring(unittest.TestCase):
         cls.reg_x, cls.reg_y = load_boston(return_X_y=True)
 
     def test_regression(self):
-        eda = DataExploring(self.reg_x, y=self.reg_y, mode='regression')
+        eda = DataExploring(self.reg_x, y=self.reg_y, mode='regression', folder='tmp/')
         eda.run()
 
     def test_classification(self):
-        eda = DataExploring(self.class_x, y=self.class_y, mode='classification')
+        eda = DataExploring(self.class_x, y=self.class_y, mode='classification', folder='tmp/')
         eda.run()
 
 

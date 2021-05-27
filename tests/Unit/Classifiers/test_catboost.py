@@ -31,3 +31,8 @@ class TestCatBoostClassifier(unittest.TestCase):
         assert model.trained is False
         model.fit(self.x, self.y)
         assert model.trained is True
+
+    def test_probability(self):
+        model = CatBoostClassifier()
+        model.fit(self.x, self.y)
+        model.predict_proba(self.x)
