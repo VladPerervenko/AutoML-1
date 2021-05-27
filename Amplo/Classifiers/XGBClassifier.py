@@ -1,41 +1,57 @@
 import copy
+import numpy as np
 import pandas as pd
 import xgboost as xgb
 from sklearn.model_selection import train_test_split
+from Amplo.Classifiers import BaseClassifier
 
 
-class XGBClassifier:
+class XGBClassifier(BaseClassifier):
 
     def __init__(self, params=None):
         """
         XG Boost wrapper
         @param params: Model parameters
         """
-        # Parameters
-        self.model = None
-        self.defaultParams = {
-            'verbosity': 0,
-            'use_label_encoder': False
-        }
-        self.params = params if params is not None else self.defaultParams
-        for key in [k for k in self.defaultParams if k not in self.params]:
-            self.params[key] = self.defaultParams[key]
-        self.callbacks = None
-        self.trained = False
-
-        # Parse params
+        default = {'verbosity': 0, 'force_col_wise': True}
+        super().__init__(default, params)
+        self.hasPredictProba = True
         self.set_params(self.params)
+
+    @staticmethod
+    def convert_to_d_matrix(x, y=None):
+        # Convert input
+        assert type(x) in [pd.DataFrame, pd.Series, np.ndarray], 'Unsupported data input format'
+        if isinstance(x, np.ndarray) and len(x.shape) == 0:
+            x = x.reshape((-1, 1))
+
+        if y is None:
+            return xgb.DMatrix(x)
+
+        else:
+            assert type(y) in [pd.Series, np.ndarray], 'Unsupported data label format'
+            return xgb.DMatrix(x, label=y)
 
     def fit(self, x, y):
         # Split & Convert data
         train_x, test_x, train_y, test_y = train_test_split(x, y, test_size=0.1)
-        d_train = xgb.DMatrix(train_x, label=train_y)
-        d_test = xgb.DMatrix(test_x, label=test_y)
+        d_train = self.convert_to_d_matrix(train_x, train_y)
+        d_test = self.convert_to_d_matrix(test_x, test_y)
+
+        # Set attributes
+        self.classes_ = np.unique(y)
+
+        # Set objective
+        if len(self.classes_) == 2:
+            self.params['objective'] = 'binary:logistic'
+        else:
+            self.params['objective'] = 'multi:softprob'
+            self.params['num_class'] = len(self.classes_)
 
         # Model training
         self.model = xgb.train(self.params,
                                d_train,
-                               evals=[(d_test, 'validation')],
+                               evals=[(d_test, 'validation'), (d_train, 'train')],
                                verbose_eval=0,
                                callbacks=[self.callbacks] if self.callbacks is not None else None,
                                early_stopping_rounds=100,
@@ -44,27 +60,29 @@ class XGBClassifier:
 
     def predict(self, x):
         assert self.trained is True, 'Model not yet trained'
-        # Convert if dataframe
-        if isinstance(x, pd.DataFrame):
-            x = x.to_numpy()
-        # Convert if single column
-        if len(x.shape) == 1:
-            x = x.reshape((-1, 1))
-        # Convert to DMatrix
-        d_predict = xgb.DMatrix(x)
-        return self.model.predict(d_predict)
+        d_predict = self.convert_to_d_matrix(x)
+        prediction = self.model.predict(d_predict)
+
+        # Parse into most-likely class
+        if len(prediction.shape) == 2:
+            # MULTICLASS
+            return np.argmax(prediction, axis=1)
+        else:
+            # BINARY
+            return np.round(prediction)
 
     def predict_proba(self, x):
         assert self.trained is True, 'Model not yet trained'
-        # Convert if dataframe
-        if isinstance(x, pd.DataFrame):
-            x = x.to_numpy()
-        # Convert if single column
-        if len(x.shape) == 1:
-            x = x.reshape((-1, 1))
-        # Convert to DMatrix
-        d_predict = xgb.DMatrix(x)
-        self.model.predict_proba(d_predict)
+        d_predict = self.convert_to_d_matrix(x)
+        prediction = self.model.predict(d_predict)
+
+        # Parse into probabilities
+        if len(prediction.shape) == 2:
+            # MULTICLASS
+            return prediction
+        else:
+            # BINARY
+            return np.hstack((1 - prediction, prediction)).reshape((-1, 2), order='F')
 
     def set_params(self, params):
         if 'callbacks' in params.keys():

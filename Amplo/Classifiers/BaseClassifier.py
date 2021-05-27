@@ -1,11 +1,18 @@
+import numpy as np
+
+
 class BaseClassifier:
 
-    def __init__(self, model, params):
-        self.defaultParams = params
-        self.model = model
-        self.model.set_params(**params)
-        self.hasPredictProba = hasattr(model, 'predict_proba')
+    def __init__(self, defaultParams=None, params=None):
+        self.defaultParams = defaultParams
+        self.model = None
+        self.hasPredictProba = False
         self.trained = False
+        self.classes_ = None
+        self.callbacks = None
+        self.params = params if params is not None else self.defaultParams
+        for key in [k for k in self.defaultParams if k not in self.params]:
+            self.params[key] = self.defaultParams[key]
 
     def get_params(self):
         return self.model.get_params()
@@ -25,6 +32,7 @@ class BaseClassifier:
         return self.model.score(x, y)
 
     def fit(self, x, y):
+        self.classes_ = np.unique(y)
         self.model.fit(x, y)
         self.trained = True
         return self

@@ -4,41 +4,47 @@ import pandas as pd
 import lightgbm as lgb
 from sklearn.metrics import f1_score
 from sklearn.model_selection import train_test_split
+from Amplo.Classifiers import BaseClassifier
 
 
-class LGBMClassifier:
+class LGBMClassifier(BaseClassifier):
 
     def __init__(self, params=None):
         """
         Light GBM wrapper
         """
-        # Parameters
-        self.model = None
-        self.defaultParams = {
-            'verbosity': 0,
-            'force_col_wise': True
-        }
-        self.params = params if params is not None else self.defaultParams
-        for key in [k for k in self.defaultParams if k not in self.params]:
-            self.params[key] = self.defaultParams[key]
-        self.callbacks = None
-        self.trained = False
-
-        # Parse params
+        default = {'verbosity': 0, 'force_col_wise': True}
+        super().__init__(default, params)
+        self.hasPredictProba = True
         self.set_params(self.params)
+
+    @staticmethod
+    def convert_to_dataset(x, y=None):
+        # Convert input
+        assert type(x) in [pd.DataFrame, pd.Series, np.ndarray], 'Unsupported data input format'
+        if isinstance(x, np.ndarray) and len(x.shape) == 0:
+            x = x.reshape((-1, 1))
+
+        if y is None:
+            return lgb.Dataset(x)
+
+        else:
+            assert type(y) in [pd.Series, np.ndarray], 'Unsupported data label format'
+            return lgb.Dataset(x, label=y)
 
     def fit(self, x, y):
         # Split & Convert data
         train_x, test_x, train_y, test_y = train_test_split(x, y, test_size=0.1)
-        d_train = lgb.Dataset(train_x, label=train_y)
-        d_test = lgb.Dataset(test_x, label=test_y)
+        d_train = self.convert_to_dataset(train_x, train_y)
+        d_test = self.convert_to_dataset(test_x, test_y)
 
-        # Set Objective
+        # Set Attrites
         if len(np.unique(y)) == 2:
             self.params['objective'] = 'binary'
         else:
             self.params['objective'] = 'multiclass'
             self.params['num_class'] = len(np.unique(y))
+        self.classes_ = np.unique(y)
 
         # Model training
         self.model = lgb.train(self.params,
@@ -53,27 +59,27 @@ class LGBMClassifier:
 
     def predict(self, x):
         assert self.trained is True, 'Model not yet trained'
-        # Convert if dataframe
-        if isinstance(x, pd.DataFrame):
-            x = x.to_numpy()
-        # Convert if single column
-        if len(x.shape) == 1:
-            x = x.reshape((-1, 1))
-        # Convert to Dataset
-        d_predict = lgb.Dataset(x)
-        return self.model.predict(d_predict)
+        prediction = self.model.predict(x)
+
+        # Parse into most-likely class
+        if len(prediction.shape) == 2:
+            # MULTICLASS
+            return np.argmax(prediction, axis=1)
+        else:
+            # BINARY
+            return np.round(prediction)
 
     def predict_proba(self, x):
         assert self.trained is True, 'Model not yet trained'
-        # Convert if dataframe
-        if isinstance(x, pd.DataFrame):
-            x = x.to_numpy()
-        # Convert if single column
-        if len(x.shape) == 1:
-            x = x.reshape((-1, 1))
-        # Convert to DMatrix
-        d_predict = lgb.Dataset(x)
-        self.model.predict_proba(d_predict)
+        prediction = self.model.predict(x)
+
+        # Parse into probabilities
+        if len(prediction.shape) == 2:
+            # MULTICLASS
+            return prediction
+        else:
+            # BINARY
+            return np.hstack((1 - prediction, prediction)).reshape((-1, 2), order='F')
 
     def set_params(self, params):
         if 'callbacks' in params.keys():
