@@ -73,8 +73,10 @@ class DataExploring:
         self.mode = mode
         self.tag = pre_tag
         self.version = version if version is not None else 0
-        self.folder = folder if folder == '' or folder[-1] == '/' else folder + '/'
         self.skip = skip_completed
+        self.folder = folder if folder == '' or folder[-1] == '/' else folder + '/'
+        if not os.path.exists(self.folder):
+            os.makedirs(self.folder)
 
         # Create Base folder
         if not os.path.exists(self.folder + 'EDA/'):

@@ -1,4 +1,5 @@
 import re
+import os
 import inspect
 import numpy as np
 import pandas as pd
@@ -35,6 +36,8 @@ class DataProcessing:
         '''
         # Parameters
         self.folder = folder if len(folder) == 0 or folder[-1] == '/' else folder + '/'
+        if not os.path.exists(self.folder):
+            os.makedirs(self.folder)
         self.version = version
         self.target = re.sub('[^a-z0-9]', '_', target.lower())
         self.mode = mode

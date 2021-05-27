@@ -27,7 +27,7 @@ class FeatureProcessing:
                  folder='',
                  mode=None,
                  version=''):
-        self.X = None
+        self.x = None
         self.originalInput = None
         self.Y = None
         self.model = None
@@ -35,7 +35,7 @@ class FeatureProcessing:
         self.threshold = None
         # Register
         self.baseScore = {}
-        self.colinearFeatures = None
+        self.coLinearFeatures = None
         self.crossFeatures = None
         self.kMeansFeatures = None
         self.diffFeatures = None
@@ -45,13 +45,16 @@ class FeatureProcessing:
         self.maxDiff = max_diff
         self.informationThreshold = information_threshold
         self.extractFeatures = extract_features
-        self.folder = folder if folder == '' or folder[-1] == '/' else folder + '/'
         self.version = version
+        self.folder = folder if folder == '' or folder[-1] == '/' else folder + '/'
+        if not os.path.exists(self.folder):
+            os.makedirs(self.folder)
+
         # Tests
         assert 0 <= max_lags < 50, 'Max lags needs to be within [0, 50]'
         assert 0 <= max_diff < 3, 'Max diff needs to be within [0, 3]'
         assert 0 < information_threshold < 1, 'Information threshold needs to be within [0, 1]'
-        assert mode is not None, 'Mode needs to be specified (regression or classification'
+        assert mode is not None, 'Mode needs to be specified (regression or classification)'
 
     def extract(self, input_frame, output_frame):
         self._clean_set(input_frame, output_frame)
@@ -65,12 +68,12 @@ class FeatureProcessing:
             self._add_trigonometry_features()
             self._add_diff_features()
             self._add_lagged_features()
-        return self.X
+        return self.x
 
     def select(self, input_frame, output_frame):
         # Check if not exists
-        if os.path.exists(self.folder + 'Sets_v%i.json' % self.version):
-            return json.load(open(self.folder + 'Sets_v%i.json' % self.version, 'r'))
+        if os.path.exists(self.folder + 'Sets_v{}.json'.format(self.version)):
+            return json.load(open(self.folder + 'Sets_v{}.json'.format(self.version), 'r'))
 
         # Execute otherwise
         else:
@@ -83,7 +86,7 @@ class FeatureProcessing:
             # result['BP'] = self._borutapy()
 
             # Store & Return
-            json.dump(result, open(self.folder + 'Sets_v%i.json' % self.version, 'w'))
+            json.dump(result, open(self.folder + 'Sets_v{}.json'.format(self.version), 'w'))
             return result
 
     def transform(self, data, features, **args):
@@ -96,12 +99,6 @@ class FeatureProcessing:
         lag_features = [k for k in features if '__lag__' in k]
         original_features = [k for k in features if '__' not in k]
 
-        # Make sure centers are provided if kMeansFeatures are nonzero
-        if len(k_means_features) != 0:
-            if 'k_means' not in args:
-                raise ValueError('For K-Means features, the Centers need to be provided.')
-            k_means = args['k_means']
-
         # Fill missing features for normalization
         required = copy.copy(original_features)
         required += [s.split('__')[::2] for s in cross_features]
@@ -109,35 +106,40 @@ class FeatureProcessing:
         required += [k.split('__')[1] for k in trigonometric_features]
         required += [s.split('__diff__')[0] for s in diff_features]
         required += [s.split('__lag__')[0] for s in lag_features]
-        if len(k_means_features) != 0:
-            required += [k for k in k_means.keys()]
         for k in [k for k in required if k not in data.keys()]:
             data.loc[:, k] = np.zeros(len(data))
 
+        # Make sure centers are provided if kMeansFeatures are nonzero
+        if len(k_means_features) != 0:
+            if 'k_means' not in args:
+                raise ValueError('For K-Means features, the Centers need to be provided.')
+            k_means = args['k_means']
+            required += [k for k in k_means.keys()]
+
         # Select
-        X = data[original_features]
+        x = data[original_features]
 
         # Multiplicative features
         for key in cross_features:
             if '__x__' in key:
                 key_a, key_b = k.split('__x__')
-                feature = X[key_a] * X[key_b]
-                X.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
+                feature = x[key_a] * x[key_b]
+                x.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
             else:
                 key_a, key_b = k.split('__d__')
-                feature = X[key_a] / X[key_b]
-                X.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
+                feature = x[key_a] / x[key_b]
+                x.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
 
         # Linear features
         for key in linear_features:
             if '__sub__' in key:
                 key_a, key_b = key.split('__sub__')
-                feature = X[key_a] - X[key_b]
-                X.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
+                feature = x[key_a] - x[key_b]
+                x.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
             else:
                 key_a, key_b = key.split('__add__')
-                feature = X[key_a] + X[key_b]
-                X.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
+                feature = x[key_a] + x[key_b]
+                x.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
 
         # Differentiated features
         for k in diff_features:
@@ -145,7 +147,7 @@ class FeatureProcessing:
             feature = data[key]
             for i in range(1, diff):
                 feature = feature.diff().fillna(0)
-            X.loc[:, k] = feature
+            x.loc[:, k] = feature
 
         # K-Means features
         if len(k_means_features) != 0:
@@ -160,19 +162,19 @@ class FeatureProcessing:
             # Calculate centers
             for key in k_means_features:
                 ind = int(key[key.find('dist__') + 6: key.rfind('_')])
-                X.loc[:, key] = np.sqrt(np.square(temp.loc[:, centers.keys()] - centers.iloc[ind]).sum(axis=1))
+                x.loc[:, key] = np.sqrt(np.square(temp.loc[:, centers.keys()] - centers.iloc[ind]).sum(axis=1))
 
         # Lagged features
         for k in lag_features:
             key, lag = k.split('__lag__')
-            X.loc[:, key] = data[key].shift(-int(lag), fill_value=0)
+            x.loc[:, key] = data[key].shift(-int(lag), fill_value=0)
 
         # Trigonometric features
         for k in trigonometric_features:
             func, key = k.split('__')
-            self.X[k] = getattr(np, func)(self.X[key])
+            self.x[k] = getattr(np, func)(self.x[key])
 
-        return X
+        return x
 
     def export_function(self):
         code = inspect.getsource(self.transform)
@@ -194,14 +196,14 @@ class FeatureProcessing:
         # Bit of necessary data cleaning (shouldn't change anything)
         input_frame = input_frame.astype('float32').replace(np.inf, 1e12).replace(-np.inf, -1e12).fillna(0)\
             .reset_index(drop=True)
-        self.X = copy.copy(input_frame)
+        self.x = copy.copy(input_frame)
         self.originalInput = copy.copy(input_frame)
         self.Y = output_frame.replace([np.inf, -np.inf], 0).fillna(0).reset_index(drop=True)
 
     def _calc_baseline(self):
         baseline = {}
         for key in self.originalInput.keys():
-            baseline[key] = self._analyse_feature(self.X[key])
+            baseline[key] = self._analyse_feature(self.x[key])
         self.baseline = pd.DataFrame(baseline).max(axis=1)
 
     def _analyse_feature(self, feature):
@@ -214,13 +216,17 @@ class FeatureProcessing:
             return [m.score(feature, self.Y)]
 
     def _accept_feature(self, candidate):
-        if (candidate > self.baseline.values).any():
+        if any(candidate > self.baseline.values):
             return True
         else:
             return False
 
     @ staticmethod
     def _select_features(scores):
+        # If scores is empty, return empty list
+        if len(scores) == 0:
+            return []
+
         # Convert dict to dataframe
         scores = pd.DataFrame(scores)
 
@@ -241,15 +247,15 @@ class FeatureProcessing:
         These features add little to no information and are therefore removed.
         """
         # Check if not already executed
-        if os.path.exists(self.folder + 'Colinear_v%i.json' % self.version):
+        if os.path.exists(self.folder + 'Colinear_v{}.json'.format(self.version)):
             print('[Features] Loading Colinear features')
-            self.colinearFeatures = json.load(open(self.folder + 'Colinear_v%i.json' % self.version, 'r'))
+            self.coLinearFeatures = json.load(open(self.folder + 'Colinear_v{}.json'.format(self.version), 'r'))
 
         # Else run
         else:
             print('[Features] Analysing colinearity')
-            nk = len(self.X.keys())
-            norm = (self.X - self.X.mean(skipna=True, numeric_only=True)).to_numpy()
+            nk = len(self.x.keys())
+            norm = (self.x - self.x.mean(skipna=True, numeric_only=True)).to_numpy()
             ss = np.sqrt(np.sum(norm ** 2, axis=0))
             corr_mat = np.zeros((nk, nk))
             for i in range(nk):
@@ -261,12 +267,12 @@ class FeatureProcessing:
                         corr_mat[i, j] = c
                         corr_mat[j, i] = c
             upper = np.triu(corr_mat)
-            self.colinearFeatures = self.X.keys()[np.sum(upper > self.informationThreshold, axis=0) > 0].to_list()
-            json.dump(self.colinearFeatures, open(self.folder + 'Colinear_v%i.json' % self.version, 'w'))
+            self.coLinearFeatures = self.x.keys()[np.sum(upper > self.informationThreshold, axis=0) > 0].to_list()
+            json.dump(self.coLinearFeatures, open(self.folder + 'Colinear_v{}.json'.format(self.version), 'w'))
 
-        self.originalInput = self.originalInput.drop(self.colinearFeatures, axis=1)
-        print('[Features] Removed %i Co-Linear features (%.3f %% threshold)' % (
-            len(self.colinearFeatures), self.informationThreshold))
+        self.originalInput = self.originalInput.drop(self.coLinearFeatures, axis=1)
+        print('[Features] Removed {} Co-Linear features ({:.3f} %% threshold)'.format(
+            len(self.coLinearFeatures), self.informationThreshold))
 
     @staticmethod
     def _static_multiply(model, data, labels, features):
@@ -285,7 +291,7 @@ class FeatureProcessing:
                     continue
                 features.append((key_a, key_b))
         print('[Features] Analysing {} Multiplication Features'.format(len(features)))
-        scores = dict(process_map(functools.partial(self._static_multiply, self.model, self.X, self.Y),
+        scores = dict(process_map(functools.partial(self._static_multiply, self.model, self.x, self.Y),
                                   features, max_workers=8, chunksize=min(100, int(len(features) / 8 / 8))))
         self.multiFeatures = self._select_features(scores)
 
@@ -295,9 +301,9 @@ class FeatureProcessing:
         Should be limited to say ~500.000 features (runs about 100-150 features / second)
         """
         # Check if not already executed
-        if os.path.exists(self.folder + 'crossFeatures_v%i.json' % self.version) and False:
-            self.crossFeatures = json.load(open(self.folder + 'crossFeatures_v%i.json' % self.version, 'r'))
-            print('[Features] Loaded %i cross features' % len(self.crossFeatures))
+        if os.path.exists(self.folder + 'crossFeatures_v{}.json'.format(self.version)) and False:
+            self.crossFeatures = json.load(open(self.folder + 'crossFeatures_v{}.json'.format(self.version), 'r'))
+            print('[Features] Loaded {} cross features'.format(len(self.crossFeatures)))
 
         # Else, execute
         else:
@@ -317,7 +323,7 @@ class FeatureProcessing:
                         continue
 
                     # Analyse Division
-                    feature = self.X[key_a] / self.X[key_b]
+                    feature = self.x[key_a] / self.x[key_b]
                     score = self._analyse_feature(feature)
                     # Accept or not
                     if self._accept_feature(score):
@@ -329,7 +335,7 @@ class FeatureProcessing:
                         continue
 
                     # Analyse Multiplication
-                    feature = self.X[key_a] * self.X[key_b]
+                    feature = self.x[key_a] * self.x[key_b]
                     score = self._analyse_feature(feature)
                     # Accept or not
                     if self._accept_feature(score):
@@ -343,25 +349,25 @@ class FeatureProcessing:
         for k in self.crossFeatures:
             if '__x__' in k:
                 key_a, key_b = k.split('__x__')
-                feature = self.X[key_a] * self.X[key_b]
-                self.X[k] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
+                feature = self.x[key_a] * self.x[key_b]
+                self.x[k] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
             else:
                 key_a, key_b = k.split('__d__')
-                feature = self.X[key_a] / self.X[key_b]
-                self.X[k] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
+                feature = self.x[key_a] / self.x[key_b]
+                self.x[k] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
 
         # Store
-        json.dump(self.crossFeatures, open(self.folder + 'crossFeatures_v%i.json' % self.version, 'w'))
-        print('[Features] Added %i cross features' % len(self.crossFeatures))
+        json.dump(self.crossFeatures, open(self.folder + 'crossFeatures_v{}.json'.format(self.version), 'w'))
+        print('[Features] Added {} cross features'.format(len(self.crossFeatures)))
 
     def _add_trigonometry_features(self):
         """
         Calculates trigonometry features with sinus, cosines
         """
         # Check if not already executed
-        if os.path.exists(self.folder + 'trigoFeatures_v%i.json' % self.version):
-            self.trigoFeatures = json.load(open(self.folder + 'trigoFeatures_v%i.json' % self.version, 'r'))
-            print('[Features] Loaded %i trigonometric features' % len(self.trigoFeatures))
+        if os.path.exists(self.folder + 'trigoFeatures_v{}.json'.format(self.version)):
+            self.trigoFeatures = json.load(open(self.folder + 'trigoFeatures_v{}.json'.format(self.version), 'r'))
+            print('[Features] Loaded {} trigonometric features'.format(len(self.trigoFeatures)))
 
         # Else, execute
         else:
@@ -370,13 +376,13 @@ class FeatureProcessing:
             scores = {}
             for key in tqdm(self.originalInput.keys()):
                 # Sinus feature
-                sin_feature = np.sin(self.X[key])
+                sin_feature = np.sin(self.x[key])
                 score = self._analyse_feature(sin_feature)
                 if self._accept_feature(score):
                     score['sin__' + key] = score
 
                 # Cosinus feature
-                cos_feature = np.cos(self.X[key])
+                cos_feature = np.cos(self.x[key])
                 score = self._analyse_feature(cos_feature)
                 if self._accept_feature(score):
                     scores['cos__' + key] = score
@@ -387,20 +393,20 @@ class FeatureProcessing:
         # Add features
         for k in self.trigoFeatures:
             func, key = k.split('__')
-            self.X[k] = getattr(np, func)(self.X[key])
+            self.x[k] = getattr(np, func)(self.x[key])
 
         # Store
-        json.dump(self.trigoFeatures, open(self.folder + 'trigoFeatures_v%i.json' % self.version, 'w'))
-        print('[Features] Added %i trigonometric features' % len(self.trigoFeatures))
+        json.dump(self.trigoFeatures, open(self.folder + 'trigoFeatures_v{}.json'.format(self.version), 'w'))
+        print('[Features] Added {} trigonometric features'.format(len(self.trigoFeatures)))
 
     def _add_additive_features(self):
         """
         Calculates simple additive and subtractive features
         """
         # Load if available
-        if os.path.exists(self.folder + 'addFeatures_v%i.json' % self.version):
-            self.addFeatures = json.load(open(self.folder + 'addFeatures_v%i.json' % self.version, 'r'))
-            print('[Features] Loaded %i additive features' % len(self.addFeatures))
+        if os.path.exists(self.folder + 'addFeatures_v{}.json'.format(self.version)):
+            self.addFeatures = json.load(open(self.folder + 'addFeatures_v{}.json'.format(self.version), 'r'))
+            print('[Features] Loaded {} additive features'.format(len(self.addFeatures)))
 
         # Else, execute
         else:
@@ -417,7 +423,7 @@ class FeatureProcessing:
                         continue
 
                     # Subtracting feature
-                    feature = self.X[key_a] - self.X[key_b]
+                    feature = self.x[key_a] - self.x[key_b]
                     score = self._analyse_feature(feature)
                     if self._accept_feature(score):
                         scores[key_a + '__sub__' + key_b] = score
@@ -428,7 +434,7 @@ class FeatureProcessing:
                         continue
 
                     # Additive feature
-                    feature = self.X[key_a] + self.X[key_b]
+                    feature = self.x[key_a] + self.x[key_b]
                     score = self._analyse_feature(feature)
                     if self._accept_feature(score):
                         scores[key_a + '__add__' + key_b] = score
@@ -441,16 +447,16 @@ class FeatureProcessing:
         for key in self.addFeatures:
             if '__sub__' in key:
                 key_a, key_b = key.split('__sub__')
-                feature = self.X[key_a] - self.X[key_b]
-                self.X.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
+                feature = self.x[key_a] - self.x[key_b]
+                self.x.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
             else:
                 key_a, key_b = key.split('__add__')
-                feature = self.X[key_a] + self.X[key_b]
-                self.X.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
+                feature = self.x[key_a] + self.x[key_b]
+                self.x.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
 
         # store
-        json.dump(self.addFeatures, open(self.folder + 'addFeatures_v%i.json' % self.version, 'w'))
-        print('[Features] Added %i additive features' % len(self.addFeatures))
+        json.dump(self.addFeatures, open(self.folder + 'addFeatures_v{}.json'.format(self.version), 'w'))
+        print('[Features] Added {} additive features'.format(len(self.addFeatures)))
 
     def _add_k_means_features(self):
         """
@@ -459,11 +465,11 @@ class FeatureProcessing:
         The distance to each cluster is then analysed.
         """
         # Check if not exist
-        if os.path.exists(self.folder + 'K-MeansFeatures_v%i.json' % self.version):
+        if os.path.exists(self.folder + 'K-MeansFeatures_v{}.json'.format(self.version)):
             # Load features and cluster size
-            self.kMeansFeatures = json.load(open(self.folder + 'K-MeansFeatures_v%i.json' % self.version, 'r'))
-            k_means_data = pd.read_csv(self.folder + 'KMeans_v%i.csv' % self.version)
-            print('[Features] Loaded %i K-Means features' % len(self.kMeansFeatures))
+            self.kMeansFeatures = json.load(open(self.folder + 'K-MeansFeatures_v{}.json'.format(self.version), 'r'))
+            k_means_data = pd.read_csv(self.folder + 'KMeans_v{}.csv'.format(self.version))
+            print('[Features] Loaded {} K-Means features'.format(len(self.kMeansFeatures)))
 
             # Prepare data
             data = copy.copy(self.originalInput)
@@ -476,7 +482,7 @@ class FeatureProcessing:
             # Add them
             for key in self.kMeansFeatures:
                 ind = int(key[key.find('dist__') + 6: key.rfind('_')])
-                self.X[key] = np.sqrt(np.square(data - centers.iloc[ind]).sum(axis=1))
+                self.x[key] = np.sqrt(np.square(data - centers.iloc[ind]).sum(axis=1))
 
         # If not executed, analyse all
         else:
@@ -492,7 +498,7 @@ class FeatureProcessing:
             # Determine clusters
             clusters = min(max(int(np.log10(len(self.originalInput)) * 8), 8), len(self.originalInput.keys()))
             kmeans = MiniBatchKMeans(n_clusters=clusters)
-            column_names = ['dist__%i_%i' % (i, clusters) for i in range(clusters)]
+            column_names = ['dist__{}_{}'.format(i, clusters) for i in range(clusters)]
             distances = pd.DataFrame(columns=column_names, data=kmeans.fit_transform(data))
             distances = distances.clip(lower=1e-12, upper=1e12).fillna(0)
 
@@ -506,15 +512,15 @@ class FeatureProcessing:
             # Add the valuable features
             self.kMeansFeatures = self._select_features(scores)
             for k in self.kMeansFeatures:
-                self.X[k] = distances[k]
+                self.x[k] = distances[k]
 
             # Create output
             centers = pd.DataFrame(columns=self.originalInput.keys(), data=kmeans.cluster_centers_)
             centers = centers.append(means, ignore_index=True)
             centers = centers.append(stds, ignore_index=True)
-            centers.to_csv(self.folder + 'KMeans_v%i.csv' % self.version, index=False)
-            json.dump(self.kMeansFeatures, open(self.folder + 'K-MeansFeatures_v%i.json' % self.version, 'w'))
-            print('[Features] Added %i K-Means features (%i clusters)' % (len(self.kMeansFeatures), clusters))
+            centers.to_csv(self.folder + 'KMeans_v{}.csv'.format(self.version), index=False)
+            json.dump(self.kMeansFeatures, open(self.folder + 'K-MeansFeatures_v{}.json'.format(self.version), 'w'))
+            print('[Features] Added {} K-Means features ({} clusters)'.format(len(self.kMeansFeatures), clusters))
 
     def _add_diff_features(self):
         """
@@ -527,9 +533,9 @@ class FeatureProcessing:
             return
 
         # Check if exist
-        if os.path.exists(self.folder + 'diffFeatures_v%i.json' % self.version):
-            self.diffFeatures = json.load(open(self.folder + 'diffFeatures_v%i.json' % self.version, 'r'))
-            print('[Features] Loaded %i differenced features' % len(self.diffFeatures))
+        if os.path.exists(self.folder + 'diffFeatures_v{}.json'.format(self.version)):
+            self.diffFeatures = json.load(open(self.folder + 'diffFeatures_v{}.json'.format(self.version), 'r'))
+            print('[Features] Loaded {} differenced features'.format(len(self.diffFeatures)))
 
         # If not exist, execute
         else:
@@ -545,20 +551,20 @@ class FeatureProcessing:
                 for key in keys:
                     score = self._analyse_feature(diff_input[key])
                     if self._accept_feature(score):
-                        scores[key + '__diff__%i' % diff] = score
+                        scores[key + '__diff__{}'.format(diff)] = score
 
             # Select the valuable features
             self.diffFeatures = self._select_features(scores)
-            print('[Features] Added %i differenced features' % len(self.diffFeatures))
+            print('[Features] Added {} differenced features'.format(len(self.diffFeatures)))
 
         # Add Differenced Features
         for k in self.diffFeatures:
             key, diff = k.split('__diff__')
-            feature = self.X[key]
+            feature = self.x[key]
             for i in range(1, diff):
                 feature = feature.diff().clip(lower=1e-12, upper=1e12).fillna(0)
-            self.X[k] = feature
-        json.dump(self.diffFeatures, open(self.folder + 'diffFeatures_v%i.json' % self.version, 'w'))
+            self.x[k] = feature
+        json.dump(self.diffFeatures, open(self.folder + 'diffFeatures_v{}.json'.format(self.version), 'w'))
 
     def _add_lagged_features(self):
         """
@@ -570,9 +576,9 @@ class FeatureProcessing:
             return
 
         # Check if exists
-        if os.path.exists(self.folder + 'laggedFeatures_v%i.json' % self.version):
-            self.laggedFeatures = json.load(open(self.folder + 'laggedFeatures_v%i.json' % self.version, 'r'))
-            print('[Features] Loaded %i lagged features' % len(self.laggedFeatures))
+        if os.path.exists(self.folder + 'laggedFeatures_v{}.json'.format(self.version)):
+            self.laggedFeatures = json.load(open(self.folder + 'laggedFeatures_v{}.json'.format(self.version), 'r'))
+            print('[Features] Loaded {} lagged features'.format(len(self.laggedFeatures)))
 
         # Else execute
         else:
@@ -581,21 +587,21 @@ class FeatureProcessing:
             scores = {}
             for lag in tqdm(range(1, self.maxLags)):
                 for key in keys:
-                    score = self._analyse_feature(self.X[key].shift(-1))
+                    score = self._analyse_feature(self.x[key].shift(-1))
                     if self._accept_feature(score):
-                        scores[key + '__lag__%i' % lag] = score
+                        scores[key + '__lag__{}'.format(lag)] = score
 
             # Select
             self.laggedFeatures = self._select_features(scores)
-            print('[Features] Added %i lagged features' % len(self.laggedFeatures))
+            print('[Features] Added {} lagged features'.format(len(self.laggedFeatures)))
 
         # Add selected
         for k in self.laggedFeatures:
             key, lag = k.split('__lag__')
-            self.X[k] = self.originalInput[key].shift(-int(lag), fill_value=0)
+            self.x[k] = self.originalInput[key].shift(-int(lag), fill_value=0)
 
         # Store
-        json.dump(self.laggedFeatures, open(self.folder + 'laggedFeatures_v%i.json' % self.version, 'w'))
+        json.dump(self.laggedFeatures, open(self.folder + 'laggedFeatures_v{}.json'.format(self.version), 'w'))
 
     def _predictive_power_score(self):
         """
@@ -603,11 +609,11 @@ class FeatureProcessing:
         Assymmetric correlation based on single decision trees trained on 5.000 samples with 4-Fold validation.
         """
         print('[Features] Determining features with PPS')
-        data = self.X.copy()
+        data = self.x.copy()
         data['target'] = self.Y.copy()
         pp_score = ppscore.predictors(data, "target")
         pp_cols = pp_score['x'][pp_score['ppscore'] != 0].to_list()
-        print('[Features] Selected %i features with Predictive Power Score' % len(pp_cols))
+        print('[Features] Selected {} features with Predictive Power Score'.format(len(pp_cols)))
         return pp_cols
 
     def _random_forest_importance(self):
@@ -617,9 +623,9 @@ class FeatureProcessing:
         """
         print('[Features] Determining features with RF')
         if self.mode == 'regression':
-            rf = RandomForestRegressor().fit(self.X, self.Y)
+            rf = RandomForestRegressor().fit(self.x, self.Y)
         elif self.mode == 'classification' or self.mode == 'multiclass':
-            rf = RandomForestClassifier().fit(self.X, self.Y)
+            rf = RandomForestClassifier().fit(self.x, self.Y)
         else:
             raise ValueError('Method not implemented')
         fi = rf.feature_importances_
@@ -627,11 +633,11 @@ class FeatureProcessing:
         ind = np.flip(np.argsort(fi))
         # Info Threshold
         ind_keep = [ind[i] for i in range(len(ind)) if fi[ind[:i]].sum() <= self.informationThreshold * sfi]
-        threshold = self.X.keys()[ind_keep].to_list()
+        threshold = self.x.keys()[ind_keep].to_list()
         ind_keep = [ind[i] for i in range(len(ind)) if fi[i] > sfi / 100]
-        increment = self.X.keys()[ind_keep].to_list()
-        print('[Features] Selected %i features with RF thresholded' % len(threshold))
-        print('[Features] Selected %i features with RF increment' % len(increment))
+        increment = self.x.keys()[ind_keep].to_list()
+        print('[Features] Selected {} features with RF thresholded'.format(len(threshold)))
+        print('[Features] Selected {} features with RF increment'.format(len(increment)))
         return threshold, increment
 
     def _borutapy(self):
@@ -641,7 +647,7 @@ class FeatureProcessing:
         elif self.mode == 'classification' or self.mode == 'multiclass':
             rf = RandomForestClassifier()
         selector = BorutaPy(rf, n_estimators='auto', verbose=0)
-        selector.fit(self.X.to_numpy(), self.Y.to_numpy())
-        bp_cols = self.X.keys()[selector.support_].to_list()
-        print('[Features] Selected %i features with Boruta' % len(bp_cols))
+        selector.fit(self.x.to_numpy(), self.Y.to_numpy())
+        bp_cols = self.x.keys()[selector.support_].to_list()
+        print('[Features] Selected {} features with Boruta'.format(len(bp_cols)))
         return bp_cols

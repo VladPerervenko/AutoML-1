@@ -2,9 +2,9 @@ import os
 import copy
 import time
 import joblib
-import datetime
 import numpy as np
 import pandas as pd
+from datetime import datetime
 from sklearn.model_selection import KFold
 from sklearn.model_selection import StratifiedKFold
 from ..Classifiers.CatBoostClassifier import CatBoostClassifier
@@ -13,6 +13,7 @@ from ..Classifiers.LGBMClassifier import LGBMClassifier
 from sklearn import linear_model
 from sklearn import ensemble
 from sklearn import svm
+from sklearn import metrics
 
 
 class Modelling:
@@ -38,6 +39,10 @@ class Modelling:
         @param [bool] store_results: Whether to store the results
         """
         # Args
+        if isinstance(scoring, str):
+            assert scoring in metrics.SCORERS.keys(), '\nPick scorer from sklearn.metrics.SCORERS: \n{}' \
+                .format(list(metrics.SCORERS.keys()))
+            scoring = metrics.SCORERS[scoring]
         self.scoring = scoring
         self.mode = mode
         self.shuffle = shuffle
@@ -45,9 +50,16 @@ class Modelling:
         self.dataset = str(dataset)
         self.storeResults = store_results
         self.storeModels = store_models
-        self.folder = folder if folder[-1] == '/' else folder + '/'
+        self.results = pd.DataFrame(columns=['date', 'model', 'dataset', 'params', 'mean_objective', 'std_objective',
+                                             'mean_time', 'std_time'])
 
-        self.samples = None      # Number of samples in data
+        # Folder
+        self.folder = folder if folder[-1] == '/' else folder + '/'
+        if store_results or store_models:
+            if not os.path.exists(self.folder):
+                os.makedirs(self.folder)
+
+        self.samples = None  # Number of samples in data
         self.needsProba = False  # Whether scorer requires needs_proba attr
         if 'True' in self.scoring._factory_args():
             self.needsProba = True
@@ -73,7 +85,7 @@ class Modelling:
         if self.mode == 'classification':
             # The thorough ones
             if self.samples < 25000:
-                if not self.needsProba:     # Arent probabilistic
+                if not self.needsProba:
                     models.append(linear_model.RidgeClassifier())
                     models.append(svm.SVC(kernel='rbf'))
                 models.append(ensemble.BaggingClassifier())
@@ -94,7 +106,7 @@ class Modelling:
         elif self.mode == 'regression':
             # The thorough ones
             if self.samples < 25000:
-                if not self.needsProba:     # Arent probabilistic
+                if not self.needsProba:
                     models.append(linear_model.LinearRegression())
                     models.append(svm.SVR(kernel='rbf'))
                 models.append(ensemble.BaggingRegressor())
@@ -126,57 +138,59 @@ class Modelling:
         print('[Modelling] Splitting data (shuffle=%s, splits=%i, features=%i)' %
               (str(self.shuffle), self.cvSplits, len(x[0])))
 
-        if self.store_results and 'Initial_Models.csv' in os.listdir(self.folder):
-            results = pd.read_csv(self.folder + 'Initial_Models.csv')
+        if self.storeResults and 'Initial_Models.csv' in os.listdir(self.folder):
+            self.results = pd.read_csv(self.folder + 'Initial_Models.csv')
+            for i in range(len(self.results)):
+                self.print_results(self.results.iloc[i])
+
         else:
-            results = pd.DataFrame(columns=['date', 'model', 'dataset', 'params', 'mean_objective', 'std_objective',
-                                            'mean_time', 'std_time'])
 
-        # Models
-        self.models = self.return_models()
+            # Models
+            self.models = self.return_models()
 
-        # Loop through models
-        for master_model in self.models:
-            # Check first if we don't already have the results
-            ind = np.where(np.logical_and(np.logical_and(
-                results['model'] == type(master_model).__name__,
-                results['dataset'] == self.dataset),
-                results['date'] == datetime.today().strftime('%d %b %y, %Hh')))[0]
-            if len(ind) != 0:
-                print('[Modelling] %s %s: %.4f, training time: %.1f s' %
-                      (type(model).__name__.ljust(60), self.scoring._score_func.__name__,
-                       np.mean(results.iloc[0]['mean_objective']), time.time() - t_start))
-                continue
+            # Loop through models
+            for master_model in self.models:
 
-            # Time & loops through Cross-Validation
-            val_score = []
-            train_score = []
-            train_time = []
-            for t, v in cross_val.split(x, y):
-                t_start = time.time()
-                xt, xv, yt, yv = x[t], x[v], y[t], y[v]
-                model = copy.copy(master_model)
-                model.fit(xt, yt)
-                val_score.append(self.scoring(model, xv, yv))
-                train_score.append(self.scoring(model, xt, yt))
-                train_time.append(time.time() - t_start)
+                # Time & loops through Cross-Validation
+                val_score = []
+                train_score = []
+                train_time = []
+                for t, v in cross_val.split(x, y):
+                    t_start = time.time()
+                    xt, xv, yt, yv = x[t], x[v], y[t], y[v]
+                    model = copy.copy(master_model)
+                    model.fit(xt, yt)
+                    val_score.append(self.scoring(model, xv, yv))
+                    train_score.append(self.scoring(model, xt, yt))
+                    train_time.append(time.time() - t_start)
 
-            # Results
-            results = results.append({'date': datetime.today().strftime('%d %b %y'), 'model': type(model).__name__,
-                                      'dataset': self.dataset, 'params': model.get_params(),
-                                      'mean_objective': np.mean(val_score),
-                                      'std_objective': np.std(val_score), 'mean_time': np.mean(train_time),
-                                      'std_time': np.std(train_time)}, ignore_index=True)
+                # Append results
+                result = {
+                    'date': datetime.today().strftime('%d %b %y'),
+                    'model': type(model).__name__,
+                    'dataset': self.dataset,
+                    'params': model.get_params(),
+                    'mean_objective': np.mean(val_score),
+                    'std_objective': np.std(val_score),
+                    'mean_time': np.mean(train_time),
+                    'std_time': np.std(train_time)
+                }
+                self.results = self.results.append(result, ignore_index=True)
+                self.print_results(result)
 
-            print('[Modelling] %s %s: %.4f, training time: %.1f s' %
-                  (type(model).__name__.ljust(60), self.scoring._score_func.__name__,
-                   np.mean(results.iloc[0]['mean_objective']), time.time() - t_start))
+                # Store model
+                if self.storeModels:
+                    joblib.dump(model, self.folder + type(model).__name__ + '_%.4f.joblib' % self.acc[-1])
 
-            if self.store_models:
-                joblib.dump(model, self.folder + type(model).__name__ + '_%.4f.joblib' % self.acc[-1])
+            # Store CSV
+            if self.storeResults:
+                self.results.to_csv(self.folder + 'Initial_Models.csv')
 
-        # Store CSV
-        if self.store_results:
-            results.to_csv(self.folder + 'Initial_Models.csv')
+        # Return results
+        return self.results
 
-        return results
+    def print_results(self, result):
+        print('[Modelling] {} {}: {:.4f}, training time: {:.1f} s'.format(result['model'].ljust(30),
+                                                                          self.scoring._score_func.__name__,
+                                                                          result['mean_objective'],
+                                                                          result['mean_time']))
