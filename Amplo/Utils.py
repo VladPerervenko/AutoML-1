@@ -1,5 +1,6 @@
 import re
 import json
+import pandas as pd
 
 
 def boolean_input(question):
@@ -37,3 +38,13 @@ def parse_json(json_string):
             print('[AutoML] Cannot validate, impassable JSON.')
             print(json_string)
             return json_string
+
+
+def check_dataframe_quality(data):
+    assert isinstance(data, pd.DataFrame)
+    assert not data.isna().any().any()
+    assert not data.isnull().any().any()
+    assert not (data.dtypes == object).any().any()
+    assert not (data.dtypes == str).any().any()
+    assert data.max().max() < 1e38 and data.min().min() > -1e38
+    return True
