@@ -1,5 +1,6 @@
 import re
 import os
+import time
 import copy
 import json
 import math
@@ -10,6 +11,8 @@ import textwrap
 import warnings
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
+from datetime import datetime
 import matplotlib.pyplot as plt
 
 import sklearn
@@ -247,7 +250,7 @@ class Pipeline:
                         print('[AutoML] Loading last version ({})'.format(changelog[:changelog.find('\n')]))
 
     def _create_dirs(self):
-        folders = ['', 'Data', 'Features', 'Production']
+        folders = ['', 'EDA', 'Data', 'Features', 'Production']
         for folder in folders:
             try:
                 os.makedirs(self.mainDir + folder)
@@ -256,14 +259,13 @@ class Pipeline:
 
     @staticmethod
     def _sort_results(results):
-        results['worst_case'] = results['mean_objective'] - results['std_objective']
         return results.sort_values('worst_case', ascending=False)
 
     def _get_best_params(self, model, feature_set):
         # Filter results for model and version
         results = self.results[np.logical_and(
             self.results['model'] == type(model).__name__,
-            self.results['data_version'] == self.version,
+            self.results['version'] == self.version,
         )]
 
         # Filter results for feature set & sort them
@@ -301,6 +303,7 @@ class Pipeline:
         self._feature_processing()
         self._initial_modelling()
         self.grid_search()
+        self._create_stacking()
         if not os.path.exists(self.mainDir + 'Production/v{}/'.format(self.version)) or \
                 len(os.listdir(self.mainDir + 'Production/v{}/'.format(self.version))) == 0:
             self._prepare_production_files()
@@ -352,7 +355,7 @@ class Pipeline:
             self.results = pd.read_csv(self.mainDir + 'Results.csv')
 
         # Check if this version has been modelled
-        if self.results is not None and self.version in self.results['data_version'].values:
+        if self.results is not None and self.version in self.results['version'].values:
             self.results = self._sort_results(self.results)
 
         # Run Modelling
@@ -365,7 +368,7 @@ class Pipeline:
                     print('[AutoML] Initial Modelling for {} features ({})'.format(feature_set, len(cols)))
 
                     # Select data
-                    x, y = copy.copy(self.x[cols]), copy.copy(self.y)
+                    x, y = copy.deepcopy(self.x[cols]), copy.deepcopy(self.y)
 
                     # Normalize Feature Set (Done here to get one normalization file per feature set)
                     if self.normalize:
@@ -373,9 +376,8 @@ class Pipeline:
                         scaler = StandardScaler()
                         x[normalize_features] = scaler.fit_transform(x[normalize_features])
                         pickle.dump(scaler,
-                                    open(
-                                        self.mainDir + 'Features/Scaler_{}_{}.pickle'.format(feature_set, self.version),
-                                        'wb'))
+                                    open(self.mainDir + 'Features/Scaler_{}_{}.pickle'.format(
+                                        feature_set, self.version), 'wb'))
                         if self.mode == 'regression':
                             output_scaler = StandardScaler()
                             y = pd.Series(output_scaler.fit_transform(y.values.reshape(-1, 1)).reshape(-1),
@@ -393,13 +395,13 @@ class Pipeline:
 
                     # Do the modelling
                     modeller = Modelling(mode=self.mode, shuffle=self.shuffle, store_models=self.storeModels,
-                                         scoring=self.objective, dataset=feature_set,
+                                         objective=self.objective, dataset=feature_set,
                                          store_results=False, folder=self.mainDir + 'Models/')
                     results = modeller.fit(x, y)
 
                     # Add results to memory
                     results['type'] = 'Initial modelling'
-                    results['data_version'] = self.version
+                    results['version'] = self.version
                     if self.results is None:
                         self.results = results
                     else:
@@ -422,13 +424,13 @@ class Pipeline:
 
             # Get model string
             if isinstance(model, str):
-                models = Modelling(mode=self.mode, samples=len(self.x), scoring=self.objective).return_models()
+                models = Modelling(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
                 model = models[[i for i in range(len(models)) if type(models[i]).__name__ == model][0]]
 
             # Organise existing results
             results = self.results[np.logical_and(
                 self.results['model'] == type(model).__name__,
-                self.results['data_version'] == self.version,
+                self.results['version'] == self.version,
             )]
             results = self._sort_results(results[results['dataset'] == feature_set])
 
@@ -445,7 +447,7 @@ class Pipeline:
 
                 # Store results
                 grid_search_results['model'] = type(model).__name__
-                grid_search_results['data_version'] = self.version
+                grid_search_results['version'] = self.version
                 grid_search_results['dataset'] = feature_set
                 grid_search_results['type'] = 'Hyper Parameter'
                 self.results = self.results.append(grid_search_results)
@@ -459,10 +461,10 @@ class Pipeline:
             return
 
         # If arguments aren't provided, run through promising models
-        models = Modelling(mode=self.mode, samples=len(self.x), scoring=self.objective).return_models()
+        models = Modelling(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
         results = self._sort_results(self.results[np.logical_and(
             self.results['type'] == 'Initial modelling',
-            self.results['data_version'] == self.version,
+            self.results['version'] == self.version,
         )])
         for iteration in range(self.gridSearchIterations):
             # Grab settings
@@ -473,7 +475,7 @@ class Pipeline:
             # Check whether exists
             model_results = self.results[np.logical_and(
                 self.results['model'] == type(model).__name__,
-                self.results['data_version'] == self.version,
+                self.results['version'] == self.version,
             )]
             model_results = self._sort_results(model_results[model_results['dataset'] == feature_set])
 
@@ -485,11 +487,11 @@ class Pipeline:
             # Else run
             else:
                 # For one model
-                grid_search_results = self._sort_results(self._grid_search_iteration(model, parameter_set, feature_set))
+                grid_search_results = self._sort_results(self._grid_search_iteration(
+                    copy.deepcopy(model), parameter_set, feature_set))
 
                 # Store
-                grid_search_results['model'] = type(model).__name__
-                grid_search_results['data_version'] = self.version
+                grid_search_results['version'] = self.version
                 grid_search_results['dataset'] = feature_set
                 grid_search_results['type'] = 'Hyper Parameter'
                 self.results = self.results.append(grid_search_results)
@@ -508,7 +510,7 @@ class Pipeline:
             type(model).__name__, feature_set, len(self.x), len(self.colKeep[feature_set])))
 
         # Select data
-        x, y = copy.copy(self.x[self.colKeep[feature_set]]), copy.copy(self.y)
+        x, y = copy.deepcopy(self.x[self.colKeep[feature_set]]), copy.deepcopy(self.y)
 
         # Normalize Feature Set (the input remains original)
         if self.normalize:
@@ -527,6 +529,7 @@ class Pipeline:
             cv = KFold(n_splits=self.cvSplits, shuffle=self.shuffle)
 
         # Select right hyper parameter optimizer
+        # todo change gridsearch param 'scoring' to 'objective'
         if self.gridSearchType == 'base':
             grid_search = BaseGridSearch(model, params=parameter_set, cv=cv, scoring=self.objective,
                                          verbose=self.verbose)
@@ -540,21 +543,123 @@ class Pipeline:
             raise NotImplementedError('Only Base, Halving and Optuna are implemented.')
         # Get results
         results = grid_search.fit(x, y)
-        results['worst_case'] = results['mean_objective'] - results['std_objective']
         return results.sort_values('worst_case', ascending=False)
 
     def _create_stacking(self):
-        # todo implement
         """
         Based on the best performing models, in addition to cheap models based on very different assumptions,
         A stacking model is optimized to enhance/combine the performance of the models.
+        --> should contain a large variety of models
+        --> classifiers need predict_proba
+        --> level 1 needs to be ordinary least squares
         """
-        # First, the ideal dataset has to be chosen, we're restricted to a single one...
-        # results = self._sort_results(self.results[np.logical_and(
-        #     self.results['type'] == 'Hyper Parameter',
-        #     self.results['data_version'] == self.version,
-        # )])
-        # feature_set = results['dataset'].value_counts()[0]
+        print('[AutoML] Creating Stacking Ensemble')
+        from sklearn import neighbors
+        from sklearn import tree
+        from sklearn import linear_model
+        from sklearn import svm
+        from sklearn import naive_bayes
+        from sklearn import ensemble
+
+        # Select feature set that has been picked most often for hyper parameter optimization
+        results = self._sort_results(self.results[np.logical_and(
+            self.results['type'] == 'Hyper Parameter',
+            self.results['version'] == self.version,
+        )])
+        feature_set = results['dataset'].value_counts().index[0]
+        print('[AutoML] Selected Stacking feature set: {}'.format(feature_set))
+        results = results[results['dataset'] == feature_set]
+
+        # Level 0, top n models + KNN, DT, Log Reg, (GNB), (SVM)
+        n_stacking_models = 3
+        stacking_models_str = results['model'].unique()[:n_stacking_models]
+        stacking_models_params = [results.iloc[np.where(results['model'] == sms)[0][0]]['params'] for sms
+                                  in stacking_models_str]
+        models = Modelling(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
+        models_str = [type(m).__name__ for m in models]
+        print(stacking_models_params)
+        print([models[models_str.index(sms)] for sms in stacking_models_str])
+        print([stacking_models_params[i] for i, sms in enumerate(stacking_models_str)])
+        stacking_models = [(sms, models[models_str.index(sms)].set_params(**stacking_models_params[i]))
+                           for i, sms in enumerate(stacking_models_str)]
+
+        # Prepare Stack
+        if self.mode == 'regression':
+            stacking_models += [
+                ('KNN', neighbors.KNeighborsRegressor()),
+                ('DT', tree.DecisionTreeRegressor()),
+                ('LogReg', linear_model.LogisticRegression()),
+            ]
+            if len(self.x) < 5000:
+                stacking_models.append(('SVR', svm.SVR()))
+            level_one = linear_model.LinearRegression()
+            stack = ensemble.StackingRegressor(stacking_models, final_estimator=level_one)
+            cv = KFold(n_splits=self.cvSplits, shuffle=self.shuffle)
+        elif self.mode == 'classification':
+            stacking_models += [
+                ('KNN', neighbors.KNeighborsClassifier()),
+                ('DT', tree.DecisionTreeClassifier()),
+                ('Logistic', linear_model.LogisticRegression()),
+                ('NaiveBayes', naive_bayes.GaussianNB())
+            ]
+            if len(self.x) < 5000:
+                stacking_models.append(('SVC', svm.SVC()))
+            level_one = linear_model.LogisticRegression()
+            stack = ensemble.StackingClassifier(stacking_models, final_estimator=level_one)
+            cv = StratifiedKFold(n_splits=self.cvSplits, shuffle=self.shuffle)
+        else:
+            raise NotImplementedError('Unknown mode')
+        print('[AutoML] Stacked models: {}'.format([type(i[1]).__name__ for i in stacking_models]))
+
+        # Train stack
+        x, y = copy.deepcopy(self.x[self.colKeep[feature_set]]), copy.deepcopy(self.y)
+        if self.normalize:
+            normalize_features = [k for k in x.keys() if k not in self.dateCols + self.catCols]
+            scaler = pickle.load(open(self.mainDir + 'Features/Scaler_{}_{}.pickle'.format(feature_set, self.version),
+                                      'rb'))
+            x[normalize_features] = scaler.fit_transform(x[normalize_features])
+            if self.mode == 'regression':
+                output_scaler = pickle.load(open(self.mainDir + 'Features/OutputScaler_{}_{}.pickle'.format(
+                    feature_set, self.version), 'rb'))
+                y = pd.Series(output_scaler.fit_transform(y.values.reshape(-1, 1)).reshape(-1),
+                              name=self.target)
+        # Sequence if necessary
+        if self.sequence:
+            sequencer = Sequence(back=self.sequenceBack, forward=self.sequenceForward,
+                                 shift=self.sequenceShift, diff=self.sequenceDiff)
+            x, y = sequencer.convert(x, y)
+        if isinstance(x, pd.DataFrame):
+            x, y = x.to_numpy(), y.to_numpy()
+
+        # Cross Validate
+        score = []
+        times = []
+        for (t, v) in tqdm(cv.split(x, y)):
+            start_time = time.time()
+            xt, xv, yt, yv = x[t], x[v], y[t].reshape((-1)), y[v].reshape((-1))
+            print('[DEBUG] ', stack)
+            model = copy.deepcopy(stack)
+            model.fit(xt, yt)
+            score.append(self.scorer(model, xv, yv))
+            times.append(time.time() - start_time)
+        print('[AutoML] Stacking result:')
+        print('[AutoML] {}:        {:.2f} \u00B1 {:.2f}'.format(self.objective, np.mean(score), np.std(score)))
+        self.results.append(pd.DataFrame({
+            'date': datetime.today().strftime('%d %b %y'),
+            'model': type(stack).__name__,
+            'dataset': feature_set,
+            'params': dict([(stacking_models_str[ind] + '__' + key, stacking_models_params[ind][key]) for ind in
+                            range(len(stacking_models_str)) for key in stacking_models_params[ind].keys()]),
+            'mean_objective': np.mean(score),
+            'std_objective': np.std(score),
+            'mean_time': np.mean(times),
+            'std_time': np.std(times),
+            'version': self.version,
+            'type': 'Stacking',
+        }))
+        self.results.to_csv(self.mainDir + 'Results.csv', index=False)
+        if self.validateResults:
+            self.validate(stack, feature_set)
 
     def validate(self, model, feature_set, params=None):
         """
@@ -568,7 +673,7 @@ class Pipeline:
 
         # Get model
         if isinstance(model, str):
-            models = Modelling(mode=self.mode, samples=len(self.x), scoring=self.objective).return_models()
+            models = Modelling(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
             model = models[[i for i in range(len(models)) if type(models[i]).__name__ == model][0]]
 
         # Get params
@@ -615,7 +720,7 @@ class Pipeline:
             i = 0
             for i, (t, v) in enumerate(cv.split(x, y)):
                 xt, xv, yt, yv = x[t], x[v], y[t].reshape((-1)), y[v].reshape((-1))
-                model = copy.copy(master_model)
+                model = copy.deepcopy(master_model)
                 model.set_params(**params)
                 model.fit(xt, yt)
 
@@ -633,8 +738,7 @@ class Pipeline:
                     ax[i // 2][i % 2].plot(model.predict(xv), color='#ffa62b', alpha=0.4)
 
             # Print & Finish plot
-            print('[AutoML] {}:        {:.2f} \u00B1 {:.2f}'.format(self.scorer._score_func.__name__,
-                                                                    np.mean(score), np.std(score)))
+            print('[AutoML] {}:        {:.2f} \u00B1 {:.2f}'.format(self.objective, np.mean(score), np.std(score)))
             ax[i // 2][i % 2].legend(['Output', 'Prediction'])
             plt.show()
 
@@ -727,7 +831,7 @@ class Pipeline:
             ax2.set(xlim=[-0.05, 1.05], ylim=[-0.05, 1.05],
                     title="ROC Curve - {}".format(type(master_model).__name__))
             ax2.legend(loc="lower right")
-            fig2.savefig(self.mainDir + 'Validation/ROC_{}.png'.format(type(model).__name__), format='png', dpi=200)
+            fig2.savefig(self.mainDir + 'EDA/ROC_{}.png'.format(type(model).__name__), format='png', dpi=200)
 
         # For MULTICLASS classification
         elif self.mode == 'classification':
@@ -773,7 +877,7 @@ class Pipeline:
         if not os.path.exists(self.mainDir + 'Production/v{}/'.format(self.version)):
             os.mkdir(self.mainDir + 'Production/v{}/'.format(self.version))
         # Get sorted results for this data version
-        results = self._sort_results(self.results[self.results['data_version'] == self.version])
+        results = self._sort_results(self.results[self.results['version'] == self.version])
 
         # In the case args are provided
         if model is not None and feature_set is not None:
@@ -793,11 +897,19 @@ class Pipeline:
             if isinstance(params, str):
                 params = Utils.parse_json(params)
 
+        # Stacking Warning
+        if 'Stacking' in model:
+            warnings.warn('Stacking Models not Production Ready, skipping to next best')
+            model = results.iloc[1]['model']
+            feature_set = results.iloc[1]['dataset']
+            params = Utils.parse_json(results.iloc[1]['params'])
+
+
         # Notify of results
         print('[AutoML] Preparing Production Env Files for {}, feature set {}'.format(model, feature_set))
         print('[AutoML] ', params)
-        print('[AutoML] {}: {:.2f} \u00B1 {:.2f}'.format(
-            self.scorer._score_func.__name__, results.iloc[0]['mean_objective'], results.iloc[0]['std_objective']))
+        print('[AutoML] {}: {:.2f} \u00B1 {:.2f}'.format(self.objective, results.iloc[0]['mean_objective'],
+                                                         results.iloc[0]['std_objective']))
 
         # Save Features
         self.bestFeatures = self.colKeep[feature_set]
@@ -833,7 +945,7 @@ class Pipeline:
                         self.mainDir + 'Production/v{}/KMeans.csv'.format(self.version))
 
         # Model
-        models = Modelling(mode=self.mode, samples=len(self.x), scoring=self.objective).return_models()
+        models = Modelling(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
         self.bestModel = [mod for mod in models if type(mod).__name__ == model][0]
         self.bestModel.set_params(**params)
         self.bestModel.fit(x, y)
@@ -932,7 +1044,7 @@ class Pipeline:
         @param data: data to do prediction on
         """
         # Load model
-        model = joblib.load(self.mainDir + 'Production/v{}/Model.joblib'.format(self.version))\
+        model = joblib.load(self.mainDir + 'Production/v{}/Model.joblib'.format(self.version))
 
         # Tests
         assert self.mode == 'classification', 'Predict_proba only available for classification'
