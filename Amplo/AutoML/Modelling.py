@@ -7,6 +7,7 @@ import pandas as pd
 from datetime import datetime
 from sklearn.model_selection import KFold
 from sklearn.model_selection import StratifiedKFold
+from sklearn.experimental import enable_hist_gradient_boosting
 from ..Classifiers.CatBoostClassifier import CatBoostClassifier
 from ..Classifiers.XGBClassifier import XGBClassifier
 from ..Classifiers.LGBMClassifier import LGBMClassifier
@@ -21,10 +22,11 @@ class Modelling:
     def __init__(self,
                  mode='regression',
                  shuffle=False,
-                 scoring=None,
-                 folder='models/',
                  n_splits=3,
-                 dataset=0,
+                 scoring='accuracy',
+                 samples=None,
+                 folder='models/',
+                 dataset='set_0',
                  store_models=False,
                  store_results=True):
         """
@@ -47,6 +49,7 @@ class Modelling:
         self.mode = mode
         self.shuffle = shuffle
         self.cvSplits = n_splits
+        self.samples = samples
         self.dataset = str(dataset)
         self.storeResults = store_results
         self.storeModels = store_models
@@ -59,7 +62,6 @@ class Modelling:
             if not os.path.exists(self.folder):
                 os.makedirs(self.folder)
 
-        self.samples = None  # Number of samples in data
         self.needsProba = False  # Whether scorer requires needs_proba attr
         if 'True' in self.scoring._factory_args():
             self.needsProba = True
@@ -124,9 +126,6 @@ class Modelling:
             # todo Catboost
             models.append(ensemble.RandomForestRegressor())
 
-        # Filter predict_proba models
-        models = [m for m in models if hasattr(m, 'predict_proba')]
-
         return models
 
     def _fit(self, x, y, cross_val):
@@ -180,7 +179,7 @@ class Modelling:
 
                 # Store model
                 if self.storeModels:
-                    joblib.dump(model, self.folder + type(model).__name__ + '_%.4f.joblib' % self.acc[-1])
+                    joblib.dump(model, self.folder + type(model).__name__ + '_{:.4f}.joblib'.format(np.mean(val_score)))
 
             # Store CSV
             if self.storeResults:
@@ -190,7 +189,6 @@ class Modelling:
         return self.results
 
     def print_results(self, result):
-        print('[Modelling] {} {}: {:.4f}, training time: {:.1f} s'.format(result['model'].ljust(30),
-                                                                          self.scoring._score_func.__name__,
-                                                                          result['mean_objective'],
-                                                                          result['mean_time']))
+        print('[Modelling] {} {}: {:.4f} \u00B1 {:.4f}, training time: {:.1f} s'.format(
+            result['model'].ljust(30), self.scoring._score_func.__name__, result['mean_objective'],
+            result['std_objective'], result['mean_time']))
