@@ -3,8 +3,10 @@ import numpy as np
 
 class BaseClassifier:
 
-    def __init__(self, defaultParams=None, params=None):
-        self.defaultParams = defaultParams
+    def __init__(self, default_params=None, **params):
+        assert isinstance(default_params, dict), 'Provided default parameters not of type dict'
+        assert isinstance(params, dict), 'Provided parameters not of type dict'
+        self.defaultParams = default_params
         self.model = None
         self.hasPredictProba = False
         self.trained = False
@@ -17,8 +19,8 @@ class BaseClassifier:
     def get_params(self):
         return self.model.get_params()
 
-    def set_params(self, args):
-        self.model.set_params(**args)
+    def set_params(self, **params):
+        self.model.set_params(**params)
         return self
 
     def predict(self, x):
@@ -27,6 +29,8 @@ class BaseClassifier:
     def predict_proba(self, x):
         if self.hasPredictProba:
             return self.model.predict_proba(x)
+        else:
+            raise AttributeError('{} has no predict_proba'.format(type(self.model).__name__))
 
     def score(self, x, y):
         return self.model.score(x, y)
