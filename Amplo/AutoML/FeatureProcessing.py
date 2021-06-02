@@ -35,7 +35,7 @@ class FeatureProcessing:
         self.y = None
         self.model = None
         self.mode = mode
-        self.timeout = timeout,
+        self.timeout = timeout
         # Register
         self.baseScore = {}
         self.coLinearFeatures = None
