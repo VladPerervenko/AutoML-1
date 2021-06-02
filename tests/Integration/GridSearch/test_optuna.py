@@ -21,7 +21,7 @@ class TestOptunaGridSearch(unittest.TestCase):
         cls.ry = pd.Series(y)
 
     def test_small_regression(self):
-        models = Modelling(mode='regression', scoring='r2', samples=100).return_models()
+        models = Modelling(mode='regression', objective='r2', samples=100).return_models()
         for model in models:
             grid_search = OptunaGridSearch(model,
                                            cv=KFold(n_splits=3),
@@ -40,7 +40,7 @@ class TestOptunaGridSearch(unittest.TestCase):
             model.set_params(**parse_json(results.iloc[0]['params']))
 
     def test_big_regression(self):
-        models = Modelling(mode='regression', scoring='r2', samples=50000).return_models()
+        models = Modelling(mode='regression', objective='r2', samples=50000).return_models()
         for model in models:
             grid_search = OptunaGridSearch(model,
                                            cv=KFold(n_splits=3),
@@ -59,7 +59,7 @@ class TestOptunaGridSearch(unittest.TestCase):
             model.set_params(**parse_json(results.iloc[0]['params']))
 
     def test_small_classification(self):
-        models = Modelling(mode='classification', scoring='accuracy', samples=100).return_models()
+        models = Modelling(mode='classification', objective='accuracy', samples=100).return_models()
         for model in models:
             grid_search = OptunaGridSearch(model,
                                            cv=StratifiedKFold(n_splits=3),
@@ -78,7 +78,7 @@ class TestOptunaGridSearch(unittest.TestCase):
             model.set_params(**parse_json(results.iloc[0]['params']))
 
     def test_big_classification(self):
-        models = Modelling(mode='classification', scoring='accuracy', samples=50000).return_models()
+        models = Modelling(mode='classification', objective='accuracy', samples=50000).return_models()
         for model in models:
             grid_search = OptunaGridSearch(model,
                                            cv=StratifiedKFold(n_splits=3),

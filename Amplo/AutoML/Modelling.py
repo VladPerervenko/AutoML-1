@@ -23,7 +23,7 @@ class Modelling:
                  mode='regression',
                  shuffle=False,
                  n_splits=3,
-                 scoring='accuracy',
+                 objective='accuracy',
                  samples=None,
                  folder='models/',
                  dataset='set_0',
@@ -33,7 +33,7 @@ class Modelling:
         Class that analyses the performance of various regressors or classifiers.
         @param [str] mode: 'regression' or 'classification'
         @param [bool] shuffle: Whether to shuffle samples for training / validation
-        @param [SciKit make_scorer] scoring: Performance metric
+        @param [str] objective: Performance metric
         @param [str] folder: Folder to store models and / or results
         @param [int] n_splits: Number of cross-validation splits
         @param [str] dataset: Name of feature set to use
@@ -41,11 +41,10 @@ class Modelling:
         @param [bool] store_results: Whether to store the results
         """
         # Args
-        if isinstance(scoring, str):
-            assert scoring in metrics.SCORERS.keys(), '\nPick scorer from sklearn.metrics.SCORERS: \n{}' \
-                .format(list(metrics.SCORERS.keys()))
-            scoring = metrics.SCORERS[scoring]
-        self.scoring = scoring
+        assert objective in metrics.SCORERS.keys(), '\nPick scorer from sklearn.metrics.SCORERS: \n{}' \
+            .format(list(metrics.SCORERS.keys()))
+        self.objective = objective
+        self.scoring = metrics.SCORERS[objective]
         self.mode = mode
         self.shuffle = shuffle
         self.cvSplits = n_splits
@@ -171,6 +170,7 @@ class Modelling:
                     'params': model.get_params(),
                     'mean_objective': np.mean(val_score),
                     'std_objective': np.std(val_score),
+                    'worst_case': np.mean(val_score) - np.std(val_score),
                     'mean_time': np.mean(train_time),
                     'std_time': np.std(train_time)
                 }
@@ -190,5 +190,5 @@ class Modelling:
 
     def print_results(self, result):
         print('[Modelling] {} {}: {:.4f} \u00B1 {:.4f}, training time: {:.1f} s'.format(
-            result['model'].ljust(30), self.scoring._score_func.__name__, result['mean_objective'],
+            result['model'].ljust(30), self.objective, result['mean_objective'],
             result['std_objective'], result['mean_time']))

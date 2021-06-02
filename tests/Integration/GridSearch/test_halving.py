@@ -22,7 +22,7 @@ class TestHalvingGridSearch(unittest.TestCase):
         cls.ry = pd.Series(y)
 
     def test_small_regression(self):
-        models = Modelling(mode='regression', scoring='r2', samples=100).return_models()
+        models = Modelling(mode='regression', objective='r2', samples=100).return_models()
         for model in models:
             grid_search = HalvingGridSearch(model,
                                             cv=KFold(n_splits=3),
@@ -38,7 +38,7 @@ class TestHalvingGridSearch(unittest.TestCase):
             assert len(results) > 0, 'Empty results {}'.format(type(model).__name__)
 
     def test_big_regression(self):
-        models = Modelling(mode='regression', scoring='r2', samples=50000).return_models()
+        models = Modelling(mode='regression', objective='r2', samples=50000).return_models()
         for model in models:
             grid_search = HalvingGridSearch(model,
                                             cv=KFold(n_splits=3),
@@ -54,7 +54,7 @@ class TestHalvingGridSearch(unittest.TestCase):
             assert len(results) > 0, 'Empty results {}'.format(type(model).__name__)
 
     def test_small_classification(self):
-        models = Modelling(mode='classification', scoring='accuracy', samples=100).return_models()
+        models = Modelling(mode='classification', objective='accuracy', samples=100).return_models()
         for model in models:
             assert hasattr(model, 'fit'), 'Has no fit attribute'
             grid_search = HalvingGridSearch(model,
@@ -71,7 +71,7 @@ class TestHalvingGridSearch(unittest.TestCase):
             assert len(results) > 0, 'Empty results {}'.format(type(model).__name__)
 
     def test_big_classification(self):
-        models = Modelling(mode='classification', scoring='accuracy', samples=50000).return_models()
+        models = Modelling(mode='classification', objective='accuracy', samples=50000).return_models()
         for model in models:
             grid_search = HalvingGridSearch(model,
                                             cv=StratifiedKFold(n_splits=3),
