@@ -1,136 +1,207 @@
 import copy
 import time
 import optuna
+import warnings
 import numpy as np
 import pandas as pd
 import multiprocessing as mp
-from .BaseGridSearch import BaseGridSearch
+from sklearn.model_selection import KFold
+from sklearn.metrics import SCORERS
 
 
-class OptunaGridSearch(BaseGridSearch):
+class OptunaGridSearch:
 
-    def __init__(self, model, params=None, cv=None, scoring=None, verbose=None, timeout=3600, n_trials=None):
-        super().__init__(model, params, cv, scoring, verbose)
+    def __init__(self, model, params=None, cv=KFold(n_splits=3), scoring='accuracy', verbose=0, timeout=3600, n_trials=250):
+        self.model = model
+        self.params = params
+        self.cv = cv
+        self.scoring = SCORERS[scoring] if isinstance(scoring, str) else scoring
+        self.verbose = verbose
         self.timeout = timeout
         self.nTrials = n_trials
         self.x, self.y = None, None
+        self.binary = True
+        self.samples = None
+
+        # Model specific settings
+        if type(self.model).__name__ == 'LinearRegression':
+            self.nTrials = 1
+
+        # Input tests
+        assert model is not None, 'Need to provide a model'
+        if scoring is None:
+            if 'Classifier' in type(model).__name__:
+                self.scoring = SCORERS['accuracy']
+            elif 'Regressor' in type(model).__name__:
+                self.scoring = SCORERS['neg_mean_squared_error']
+            else:
+                raise ValueError('Model mode unknown')
 
     def get_params(self, trial):
-        # todo parameterize
-        if type(self.model).__name__ == 'Lasso' or \
-                type(self.model).__name__ == 'Ridge' or \
-                type(self.model).__name__ == 'RidgeClassifier':
+        if type(self.model).__name__ == 'LinearRegression':
+            return {}
+        elif type(self.model).__name__ == 'Lasso' or \
+                'Ridge' in type(self.model).__name__:
             return {
                 'alpha': trial.suggest_uniform('alpha', 0, 10),
             }
-        elif type(self.model).__name__ == 'SVC' or \
-                type(self.model).__name__ == 'SVR':
+        elif 'SV' in type(self.model).__name__:
             return {
                 'gamma': trial.suggest_categorical('gamma', ['scale', 'auto', 0.001, 0.01, 0.1, 0.5, 1]),
                 'C': trial.suggest_uniform('C', 0, 10),
             }
+        elif 'KNeighbors' in type(self.model).__name__:
+            return {
+                'n_neighbors': trial.suggest_int('n_neighbors', 5, min(50, int(self.samples / 10))),
+                'weights': trial.suggest_categorical('weights', ['uniform', 'distance']),
+                'leaf_size': trial.suggest_int('leaf_size', 1, min(100, int(self.samples / 10))),
+            }
 
         # Regressors
+        elif type(self.model).__name__ == 'DecisionTreeRegressor':
+            return {
+                'criterion': trial.suggest_categorical('criterion', ['mse', 'friedman_mse', 'mae', 'poisson']),
+                'max_depth': trial.sugest_int('max_depth', 3, min(25, int(np.log2(self.samples)))),
+            }
+        elif type(self.model).__name__ == 'BaggingRegressor':
+            return {
+                'n_estimators': trial.suggest_int('n_estimators', 10, 250),
+                'max_samples': trial.suggest_uniform('max_samples', 0, 1),
+                'max_features': trial.suggest_uniform('max_features', 0, 1),
+            }
         elif type(self.model).__name__ == 'CatBoostRegressor':
             return {
                 'loss_function': trial.suggest_categorical('loss', ['MAE', 'RMSE']),
-                'learning_rate': trial.suggest_uniform('learning_rate', 0, 1),
+                'learning_rate': trial.suggest_loguniform('learning_rate', 0.001, 0.5),
                 'l2_leaf_reg': trial.suggest_uniform('l2_leaf_reg', 0, 10),
-                'depth': trial.suggest_int('depth', 3, 15),
-                'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, 1000),
+                'depth': trial.suggest_int('depth', 3, min(10, int(np.log2(self.samples)))),
+                'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, min(1000, int(self.samples / 10))),
                 'max_leaves': trial.suggest_int('max_leaves', 10, 250),
             }
         elif type(self.model).__name__ == 'GradientBoostingRegressor':
             return {
                 'loss': trial.suggest_categorical('loss', ['ls', 'lad', 'huber']),
-                'learning_rate': trial.suggest_uniform('learning_Rate', 0, 1),
-                'max_depth': trial.suggest_int('max_depth', 3, 15),
+                'learning_rate': trial.suggest_loguniform('learning_rate', 0.001, 0.5),
+                'max_depth': trial.suggest_int('max_depth', 3, min(10, int(np.log2(self.samples)))),
+                'n_estimators': trial.suggest_int('n_estimators', 100, 500),
+                'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, min(1000, int(self.samples / 10))),
+                'max_features': trial.suggest_uniform('max_features', 0, 1),
+                'subsample': trial.suggest_uniform('subsample', 0, 1),
             }
         elif type(self.model).__name__ == 'HistGradientBoostingRegressor':
             return {
-                'max_iter': trial.suggest_int('max_iter', 100, 250),
-                'max_bins': trial.suggest_int('max_bins', 100, 255),
                 'loss': trial.suggest_categorical('loss', ['least_squares', 'least_absolute_deviation']),
-                'l2_regularization': trial.suggest_uniform('l2_regularization', 0, 10),
-                'learning_rate': trial.suggest_uniform('learning_rate', 0, 1),
+                'learning_rate': trial.suggest_loguniform('learning_rate', 0.001, 0.5),
+                'max_iter': trial.suggest_int('max_iter', 100, 250),
                 'max_leaf_nodes': trial.suggest_int('max_leaf_nodes', 30, 150),
+                'max_depth': trial.suggest_int('max_depth', 3, min(10, int(np.log2(self.samples)))),
+                'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, min(1000, int(self.samples / 10))),
+                'l2_regularization': trial.suggest_uniform('l2_regularization', 0, 10),
+                'max_bins': trial.suggest_int('max_bins', 100, 255),
                 'early_stopping': [True],
             }
         elif type(self.model).__name__ == 'RandomForestRegressor':
             return {
                 'criterion': trial.suggest_categorical('criterion', ['mse', 'mae']),
-                'max_depth': trial.suggest_int('max_depth', 3, 15),
+                'max_depth': trial.suggest_int('max_depth', 3, min(15, int(np.log2(self.samples)))),
                 'max_features': trial.suggest_categorical('max_features', ['auto', 'sqrt']),
                 'min_samples_split': trial.suggest_int('min_samples_split', 2, 50),
-                'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, 1000),
+                'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, min(1000, int(self.samples / 10))),
                 'bootstrap': trial.suggest_categorical('bootstrap', [True, False]),
             }
         elif type(self.model).__name__ == 'XGBRegressor':
-            return {
-                'max_depth': trial.suggest_int('max_depth', 3, 15),
-                'booster': trial.suggest_categorical('booster', ['gbtree', 'gblinear', 'dart']),
-                'learning_rate': trial.suggest_uniform('learning_rate', 0, 10),
-                'verbosity': [0],
-                'n_jobs': [mp.cpu_count() - 1],
+            param = {
+                "objective": trial.suggest_categorical('objective', ['reg:squarederror', 'reg:squaredlogerror',
+                                                                     'reg:logistic']),
+                "eval_metric": "rmse",
+                "booster": trial.suggest_categorical("booster", ["gbtree", "gblinear", "dart"]),
+                "lambda": trial.suggest_loguniform("lambda", 1e-8, 1.0),
+                "alpha": trial.suggest_loguniform("alpha", 1e-8, 1.0),
+                "callbacks": optuna.integration.XGBoostPruningCallback(trial, "validation-logloss"),
+                'learning_rate': trial.suggest_loguniform('learning_rate', 0.001, 0.5),
             }
+            if param["booster"] == "gbtree" or param["booster"] == "dart":
+                param["max_depth"] = trial.suggest_int("max_depth", 1, min(10, int(np.log2(self.samples))))
+                param["eta"] = trial.suggest_loguniform("eta", 1e-8, 1.0)
+                param["gamma"] = trial.suggest_loguniform("gamma", 1e-8, 1.0)
+                param["grow_policy"] = trial.suggest_categorical("grow_policy", ["depthwise", "lossguide"])
+            if param["booster"] == "dart":
+                param["sample_type"] = trial.suggest_categorical("sample_type", ["uniform", "weighted"])
+                param["normalize_type"] = trial.suggest_categorical("normalize_type", ["tree", "forest"])
+                param["rate_drop"] = trial.suggest_loguniform("rate_drop", 1e-8, 1.0)
+                param["skip_drop"] = trial.suggest_loguniform("skip_drop", 1e-8, 1.0)
+            return param
         elif type(self.model).__name__ == 'LGBMRegressor':
             return {
                 'num_leaves': trial.suggest_int('num_leaves', 10, 150),
-                'min_child_samples': trial.suggest_int('min_child_samples', 1, 1000),
+                'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, min(1000, int(self.samples / 10))),
                 'min_child_weight': trial.suggest_uniform('min_child_weight', 0, 1),
                 'subsample': trial.suggest_uniform('subsample', 0, 1),
                 'colsample_bytree': trial.suggest_uniform('colsample_bytree', 0, 1),
                 'reg_alpha': trial.suggest_uniform('reg_alpha', 0, 1),
                 'reg_lambda': trial.suggest_uniform('reg_lambda', 0, 1),
-                'n_jobs': [mp.cpu_count() - 1],
             }
 
         # Classifiers
+        elif type(self.model).__name__ == 'BaggingClassifier':
+            return {
+                'n_estimators': trial.suggest_int('n_estimators', 10, 250),
+                'max_samples': trial.suggest_uniform('max_samples', 0, 1),
+                'max_features': trial.suggest_uniform('max_features', 0, 1),
+            }
         elif type(self.model).__name__ == 'CatBoostClassifier':
             return {
-                'loss_function': trial.suggest_categorical('loss_function', ['Logloss' if self.y.nunique() == 2 else
-                                                                             'MultiClass']),
-                'learning_rate': trial.suggest_uniform('learning_rate', 0, 1),
+                "verbose": 0,
+                'early_stopping_rounds': 100,
+                'loss_function': 'Logloss' if self.binary else 'MultiClass',
+                'learning_rate': trial.suggest_loguniform('learning_rate', 0.001, 0.5),
                 'l2_leaf_reg': trial.suggest_uniform('l2_leaf_reg', 0, 10),
-                'depth': trial.suggest_int('depth', 1, 10),
-                'min_data_in_leaf': trial.suggest_randint('min_data_in_leaf', 50, 500),
+                'depth': trial.suggest_int('depth', 1,  min(10, int(np.log2(self.samples)))),
+                'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, min(1000, int(self.samples / 10))),
                 'grow_policy': trial.suggest_categorical('grow_policy', ['SymmetricTree', 'Depthwise', 'Lossguide']),
             }
         elif type(self.model).__name__ == 'GradientBoostingClassifier':
             return {
                 'loss': trial.suggest_categorical('loss', ['deviance', 'exponential']),
-                'learning_rate': trial.suggest_uniform('learning_rate', 0, 1),
-                'max_depth': trial.suggest_int('max_depth', 3, 15),
+                'learning_rate': trial.suggest_loguniform('learning_rate', 0.001, 0.5),
+                'max_depth': trial.suggest_int('max_depth', 3, min(15, int(np.log2(self.samples)))),
+                'n_estimators': trial.suggest_int('n_estimators', 100, 500),
+                'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, min(1000, int(self.samples / 10))),
+                'max_features': trial.suggest_uniform('max_features', 0, 1),
+                'subsample': trial.suggest_uniform('subsample', 0, 1),
             }
         elif type(self.model).__name__ == 'HistGradientBoostingClassifier':
             return {
+                'learning_rate': trial.suggest_loguniform('learning_rate', 0.001, 0.5),
                 'max_iter': trial.suggest_int('max_iter', 100, 250),
-                'max_bins': trial.suggest_int('max_bins', 100, 255),
-                'l2_regularization': trial.suggest_uniform('l2_regularization', 0, 10),
-                'learning_rate': trial.suggest_uniform('learning_Rate', 0, 1),
                 'max_leaf_nodes': trial.suggest_int('max_leaf_nodes', 30, 150),
-                'early_stopping': [True]
+                'max_depth': trial.suggest_int('max_depth', 3, min(10, int(np.log2(self.samples)))),
+                'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, min(1000, int(self.samples / 10))),
+                'l2_regularization': trial.suggest_uniform('l2_regularization', 0, 10),
+                'max_bins': trial.suggest_int('max_bins', 100, 255),
+                'early_stopping': [True],
             }
         elif type(self.model).__name__ == 'RandomForestClassifier':
             return {
                 'criterion': trial.suggest_categorical('criterion', ['gini', 'entropy']),
-                'max_depth': trial.suggest_int('max_depth', 3, 15),
+                'max_depth': trial.suggest_int('max_depth', 3, min(15, int(np.log2(self.samples)))),
                 'max_features': trial.suggest_categorical('max_features', ['auto', 'sqrt']),
                 'min_samples_split': trial.suggest_int('min_samples_split', 2, 50),
-                'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, 1000),
+                'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, min(1000, int(self.samples / 10))),
                 'bootstrap': trial.suggest_categorical('bootstrap', [True, False]),
             }
         elif type(self.model).__name__ == 'XGBClassifier':
             param = {
-                "silent": 1,
-                "objective": "binary:logistic",
+                "objective": "binary:logistic" if self.binary else 'multi:softprob',
+                "eval_metric": "logloss",
                 "booster": trial.suggest_categorical("booster", ["gbtree", "gblinear", "dart"]),
                 "lambda": trial.suggest_loguniform("lambda", 1e-8, 1.0),
                 "alpha": trial.suggest_loguniform("alpha", 1e-8, 1.0),
-                "callbacks": optuna.integration.XGBoostPruningCallback(trial, "")
+                "callbacks": optuna.integration.XGBoostPruningCallback(trial, "validation-logloss"),
+                'learning_rate': trial.suggest_loguniform('learning_rate', 0.001, 0.5),
             }
             if param["booster"] == "gbtree" or param["booster"] == "dart":
-                param["max_depth"] = trial.suggest_int("max_depth", 1, 9)
+                param["max_depth"] = trial.suggest_int("max_depth", 1, min(10, int(np.log2(self.samples))))
                 param["eta"] = trial.suggest_loguniform("eta", 1e-8, 1.0)
                 param["gamma"] = trial.suggest_loguniform("gamma", 1e-8, 1.0)
                 param["grow_policy"] = trial.suggest_categorical("grow_policy", ["depthwise", "lossguide"])
@@ -142,7 +213,7 @@ class OptunaGridSearch(BaseGridSearch):
             return param
         elif type(self.model).__name__ == 'LGBMClassifier':
             return {
-                "objective": "binary",
+                "objective": "binary" if self.binary else 'multiclass',
                 "metric": trial.suggest_categorical("metric", ['rmse', 'auc', 'average_precision', 'binary_logloss']),
                 "verbosity": -1,
                 "boosting_type": "gbdt",
@@ -152,19 +223,30 @@ class OptunaGridSearch(BaseGridSearch):
                 "feature_fraction": trial.suggest_uniform("feature_fraction", 0.4, 1.0),
                 "bagging_fraction": trial.suggest_uniform("bagging_fraction", 0.4, 1.0),
                 "bagging_freq": trial.suggest_int("bagging_freq", 1, 7),
-                "min_child_samples": trial.suggest_int("min_child_samples", 5, 100),
-                'n_jobs': [mp.cpu_count() - 1],
-                'callbacks': optuna.integration.LightGBMPruningCallback(trial, ""),
+                "min_data_in_leaf": trial.suggest_int("min_data_in_leaf", 1, min(1000, int(self.samples / 10))),
+                'callbacks': optuna.integration.LightGBMPruningCallback(trial, "neg_f1", "valid_1"),
             }
-
-        # Raise error if nothing is returned
-        raise NotImplementedError('Hyper parameter tuning not implemented for ', type(self.model).__name__)
+        else:
+            # Raise error if nothing is returned
+            warnings.warn('Hyper parameter tuning not implemented for {}'.format(type(self.model).__name__))
+            return {}
 
     def fit(self, x, y):
+        if isinstance(y, pd.DataFrame):
+            assert len(y.keys()) == 1, 'Multiple target columns not supported.'
+            y = y[y.keys()[0]]
+        assert isinstance(x, pd.DataFrame), 'X should be Pandas DataFrame'
+        assert isinstance(y, pd.Series), 'Y should be Pandas Series or DataFrame'
+
+        # Set mode
+        self.binary = y.nunique() == 2
+        self.samples = len(y)
+
         # Store
         self.x, self.y = x, y
+
         # Set up study
-        study = optuna.create_study(sampler=optuna.samplers.TPESampler())
+        study = optuna.create_study(sampler=optuna.samplers.TPESampler(), direction='maximize')
         study.optimize(self.objective, timeout=self.timeout, n_trials=self.nTrials, show_progress_bar=True)
 
         # Parse results
@@ -191,7 +273,7 @@ class OptunaGridSearch(BaseGridSearch):
 
             # Train model
             t_start = time.time()
-            model = copy.copy(self.model)
+            model = copy.deepcopy(self.model)
             model.set_params(**self.get_params(trial))
             model.fit(xt, yt)
 
