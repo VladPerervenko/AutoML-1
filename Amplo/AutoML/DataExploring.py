@@ -82,7 +82,6 @@ class DataExploring:
         if not os.path.exists(self.folder + 'EDA/'):
             os.mkdir(self.folder + 'EDA')
         self.folder += 'EDA/'
-        self.run()
 
     def run(self):
         # Run all functions
