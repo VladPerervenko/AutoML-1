@@ -1,4 +1,5 @@
 import os
+import time
 import json
 import copy
 import ppscore
@@ -19,7 +20,6 @@ from sklearn.cluster import MiniBatchKMeans
 
 
 class FeatureProcessing:
-    # todo implement time budget
 
     def __init__(self,
                  max_lags=10,
@@ -28,13 +28,14 @@ class FeatureProcessing:
                  extract_features=True,
                  folder='',
                  mode=None,
+                 timeout=900,
                  version=''):
         self.x = None
         self.originalInput = None
-        self.Y = None
+        self.y = None
         self.model = None
         self.mode = mode
-        self.threshold = None
+        self.timeout = timeout,
         # Register
         self.baseScore = {}
         self.coLinearFeatures = None
@@ -91,7 +92,8 @@ class FeatureProcessing:
             json.dump(result, open(self.folder + 'Sets_v{}.json'.format(self.version), 'w'))
             return result
 
-    def transform(self, data, features, **args):
+    @staticmethod
+    def transform(data, features, **args):
         # Split Features
         cross_features = [k for k in features if '__x__' in k or '__d__' in k]
         linear_features = [k for k in features if '__sub__' in k or '__add__' in k]
@@ -209,7 +211,7 @@ class FeatureProcessing:
             .reset_index(drop=True)
         self.x = copy.copy(input_frame)
         self.originalInput = copy.copy(input_frame)
-        self.Y = output_frame.replace([np.inf, -np.inf], 0).fillna(0).reset_index(drop=True)
+        self.y = output_frame.replace([np.inf, -np.inf], 0).fillna(0).reset_index(drop=True)
 
     def _calc_baseline(self):
         baseline = {}
@@ -220,11 +222,11 @@ class FeatureProcessing:
     def _analyse_feature(self, feature):
         feature = feature.clip(lower=1e-12, upper=1e12).fillna(0).values.reshape((-1, 1))
         m = copy.copy(self.model)
-        m.fit(feature, self.Y)
+        m.fit(feature, self.y)
         if self.mode == 'multiclass':
-            return [m.score(feature, self.Y, self.Y == i) for i in self.Y.unique()]
+            return [m.score(feature, self.y, self.y == i) for i in self.y.unique()]
         else:
-            return [m.score(feature, self.Y)]
+            return [m.score(feature, self.y)]
 
     def _accept_feature(self, candidate):
         if any(candidate > self.baseline.values):
@@ -302,7 +304,7 @@ class FeatureProcessing:
                     continue
                 features.append((key_a, key_b))
         print('[Features] Analysing {} Multiplication Features'.format(len(features)))
-        scores = dict(process_map(functools.partial(self._static_multiply, self.model, self.x, self.Y),
+        scores = dict(process_map(functools.partial(self._static_multiply, self.model, self.x, self.y),
                                   features, max_workers=8, chunksize=min(100, int(len(features) / 8 / 8))))
         self.multiFeatures = self._select_features(scores)
 
@@ -321,6 +323,7 @@ class FeatureProcessing:
             print('[Features] Analysing cross features')
             scores = {}
             n_keys = len(self.originalInput.keys())
+            start_time = time.time()
 
             # Analyse Cross Features
             for i, key_a in enumerate(tqdm(self.originalInput.keys())):
@@ -331,6 +334,9 @@ class FeatureProcessing:
                         continue
                     # Skip rest if key_a is not useful in first min(50, 30%) (uniform)
                     if accepted_for_key_a == 0 and j > min(50, int(n_keys / 3)):
+                        continue
+                    # Skip if we're out of time
+                    if time.time() - start_time > self.timeout:
                         continue
 
                     # Analyse Division
@@ -422,6 +428,7 @@ class FeatureProcessing:
         # Else, execute
         else:
             scores = {}
+            start_time = time.time()
             n_keys = len(self.originalInput.keys())
             for i, key_a in enumerate(self.originalInput.keys()):
                 accepted_for_key_a = 0
@@ -431,6 +438,9 @@ class FeatureProcessing:
                         continue
                     # Skip rest if key_a is not useful in first min(50, 30%) (uniform)
                     if accepted_for_key_a == 0 and j > min(50, int(n_keys / 3)):
+                        continue
+                    # Skip if we're out of time
+                    if time.time() - start_time > self.timeout:
                         continue
 
                     # Subtracting feature
@@ -621,7 +631,7 @@ class FeatureProcessing:
         """
         print('[Features] Determining features with PPS')
         data = self.x.copy()
-        data['target'] = self.Y.copy()
+        data['target'] = self.y.copy()
         pp_score = ppscore.predictors(data, "target")
         pp_cols = pp_score['x'][pp_score['ppscore'] != 0].to_list()
         print('[Features] Selected {} features with Predictive Power Score'.format(len(pp_cols)))
@@ -634,9 +644,9 @@ class FeatureProcessing:
         """
         print('[Features] Determining features with RF')
         if self.mode == 'regression':
-            rf = RandomForestRegressor().fit(self.x, self.Y)
+            rf = RandomForestRegressor().fit(self.x, self.y)
         elif self.mode == 'classification' or self.mode == 'multiclass':
-            rf = RandomForestClassifier().fit(self.x, self.Y)
+            rf = RandomForestClassifier().fit(self.x, self.y)
         else:
             raise ValueError('Method not implemented')
         fi = rf.feature_importances_
@@ -653,12 +663,13 @@ class FeatureProcessing:
 
     def _borutapy(self):
         print('[Features] Determining features with Boruta')
+        rf = None
         if self.mode == 'regression':
             rf = RandomForestRegressor()
         elif self.mode == 'classification' or self.mode == 'multiclass':
             rf = RandomForestClassifier()
         selector = BorutaPy(rf, n_estimators='auto', verbose=0)
-        selector.fit(self.x.to_numpy(), self.Y.to_numpy())
+        selector.fit(self.x.to_numpy(), self.y.to_numpy())
         bp_cols = self.x.keys()[selector.support_].to_list()
         print('[Features] Selected {} features with Boruta'.format(len(bp_cols)))
         return bp_cols
