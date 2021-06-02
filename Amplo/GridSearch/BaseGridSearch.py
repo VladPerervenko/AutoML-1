@@ -2,12 +2,12 @@ import time
 import copy
 import random
 import warnings
-import datetime
 import itertools
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 import multiprocessing as mp
+from datetime import datetime
 from sklearn.metrics import SCORERS
 
 
@@ -318,6 +318,8 @@ class BaseGridSearch:
                                                          i + 1, len(self.parsedParams)))
 
             self.result.append({
+                'date': datetime.today().strftime('%d %b %y'),
+                'model': type(model).__name__,
                 'mean_objective': np.mean(scoring),
                 'std_objective': np.std(scoring),
                 'worst_case': np.mean(scoring) - np.std(scoring),

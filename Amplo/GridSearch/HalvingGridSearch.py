@@ -3,6 +3,7 @@ import warnings
 import numpy as np
 import pandas as pd
 import multiprocessing as mp
+from datetime import datetime
 from scipy.stats import uniform
 from scipy.stats import randint
 from scipy.stats import loguniform
@@ -269,10 +270,16 @@ class HalvingGridSearch:
 
         # Parse results
         scikit_results = pd.DataFrame(halving_random_search.cv_results_)
-        results = pd.DataFrame()
-        results[['params', 'mean_objective', 'std_objective', 'mean_time', 'std_time']] = scikit_results[
-            ['params', 'mean_test_score', 'std_test_score', 'mean_fit_time', 'std_fit_time']]
-        results['worst_case'] = - results['mean_objective'] - results['std_objective']
+        results = pd.DataFrame({
+            'date': datetime.today().strftime('%d %b %y'),
+            'model': type(self.model).__name__,
+            'params': scikit_results['params'],
+            'mean_objective': scikit_results['mean_test_score'],
+            'std_objective': scikit_results['std_test_score'],
+            'worst_case': scikit_results['mean_test_score'] - scikit_results['std_test_score'],
+            'mean_time': scikit_results['mean_fit_time'],
+            'std_time': scikit_results['std_fit_time'],
+        })
 
         # Update resource in results
         if self.resource != 'n_samples':

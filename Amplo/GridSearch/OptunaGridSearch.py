@@ -4,7 +4,7 @@ import optuna
 import warnings
 import numpy as np
 import pandas as pd
-import multiprocessing as mp
+from datetime import datetime
 from sklearn.model_selection import KFold
 from sklearn.metrics import SCORERS
 
@@ -225,7 +225,7 @@ class OptunaGridSearch:
                 "bagging_fraction": trial.suggest_uniform("bagging_fraction", 0.4, 1.0),
                 "bagging_freq": trial.suggest_int("bagging_freq", 1, 7),
                 "min_data_in_leaf": trial.suggest_int("min_data_in_leaf", 1, min(1000, int(self.samples / 10))),
-                'callbacks': optuna.integration.LightGBMPruningCallback(trial, "f1", "valid_1"),
+                'callbacks': optuna.integration.LightGBMPruningCallback(trial, "neg_log_loss", "valid_1"),
             }
         else:
             # Raise error if nothing is returned
@@ -253,10 +253,12 @@ class OptunaGridSearch:
         # Parse results
         optuna_results = study.trials_dataframe()
         results = pd.DataFrame({
-            'worst_case': optuna_results['value'] - optuna_results['user_attrs_std_value'],
+            'date': datetime.today().strftime('%d %b %y'),
+            'model': type(self.model).__name__,
+            'params': [x.params for x in study.get_trials()],
             'mean_objective': optuna_results['value'],
             'std_objective': optuna_results['user_attrs_std_value'],
-            'params': [x.params for x in study.get_trials()],
+            'worst_case': optuna_results['value'] - optuna_results['user_attrs_std_value'],
             'mean_time': optuna_results['user_attrs_mean_time'],
             'std_time': optuna_results['user_attrs_std_time']
         })
