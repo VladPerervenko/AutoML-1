@@ -1,3 +1,5 @@
+import os
+import pytest
 import shutil
 import unittest
 from sklearn.datasets import load_iris
@@ -21,5 +23,8 @@ class TestDataExploring(unittest.TestCase):
         eda.run()
 
 
-def teardown_func():
-    shutil.rmtree('EDA')
+@pytest.fixture(scope="session", autouse=True)
+def teardown():
+    yield
+    if os.path.exists('tmp'):
+        shutil.rmtree('tmp')
