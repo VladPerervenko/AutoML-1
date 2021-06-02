@@ -3,7 +3,9 @@ import json
 import copy
 import ppscore
 import inspect
+import warnings
 import functools
+import itertools
 import numpy as np
 import pandas as pd
 from boruta import BorutaPy
@@ -101,68 +103,77 @@ class FeatureProcessing:
 
         # Fill missing features for normalization
         required = copy.copy(original_features)
-        required += [s.split('__')[::2] for s in cross_features]
-        required += [s.split('__')[::2] for s in linear_features]
-        required += [k.split('__')[1] for k in trigonometric_features]
-        required += [s.split('__diff__')[0] for s in diff_features]
-        required += [s.split('__lag__')[0] for s in lag_features]
-        for k in [k for k in required if k not in data.keys()]:
-            data.loc[:, k] = np.zeros(len(data))
+        required += list(itertools.chain.from_iterable([s.split('__')[::2] for s in cross_features]))
+        required += list(itertools.chain.from_iterable([s.split('__')[::2] for s in linear_features]))
+        required += list(itertools.chain.from_iterable([k.split('__')[1] for k in trigonometric_features]))
+        required += list(itertools.chain.from_iterable([s.split('__diff__')[0] for s in diff_features]))
+        required += list(itertools.chain.from_iterable([s.split('__lag__')[0] for s in lag_features]))
 
         # Make sure centers are provided if kMeansFeatures are nonzero
+        k_means = None
         if len(k_means_features) != 0:
             if 'k_means' not in args:
                 raise ValueError('For K-Means features, the Centers need to be provided.')
             k_means = args['k_means']
             required += [k for k in k_means.keys()]
 
-        # Select
+        # Remove duplicates from required
+        required = list(set(required))
+
+        # Impute missing keys
+        missing_keys = [k for k in required if k not in data.keys()]
+        if len(missing_keys) > 0:
+            warnings.warn('Imputing {} keys'.format(len(missing_keys)))
+        for k in missing_keys:
+            data.loc[:, k] = np.zeros(len(data))
+
+        # Start Output with selected original features
         x = data[original_features]
 
         # Multiplicative features
         for key in cross_features:
             if '__x__' in key:
-                key_a, key_b = k.split('__x__')
-                feature = x[key_a] * x[key_b]
+                key_a, key_b = key.split('__x__')
+                feature = data[key_a] * data[key_b]
                 x.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
             else:
-                key_a, key_b = k.split('__d__')
-                feature = x[key_a] / x[key_b]
+                key_a, key_b = key.split('__d__')
+                feature = data[key_a] / data[key_b]
                 x.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
 
         # Linear features
         for key in linear_features:
             if '__sub__' in key:
                 key_a, key_b = key.split('__sub__')
-                feature = x[key_a] - x[key_b]
+                feature = data[key_a] - data[key_b]
                 x.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
             else:
                 key_a, key_b = key.split('__add__')
-                feature = x[key_a] + x[key_b]
+                feature = data[key_a] + data[key_b]
                 x.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
 
         # Differentiated features
         for k in diff_features:
             key, diff = k.split('__diff__')
             feature = data[key]
-            for i in range(1, diff):
+            for i in range(1, int(diff)):
                 feature = feature.diff().fillna(0)
             x.loc[:, k] = feature
 
         # K-Means features
         if len(k_means_features) != 0:
             # Organise data
-            temp = copy.copy(data)
             centers = k_means.iloc[:-2]
             means = k_means.iloc[-2]
             stds = k_means.iloc[-1]
+            temp = copy.deepcopy(data.loc[:, centers.keys()])
             # Normalize
             temp -= means
             temp /= stds
             # Calculate centers
             for key in k_means_features:
                 ind = int(key[key.find('dist__') + 6: key.rfind('_')])
-                x.loc[:, key] = np.sqrt(np.square(temp.loc[:, centers.keys()] - centers.iloc[ind]).sum(axis=1))
+                x.loc[:, key] = np.sqrt(np.square(temp - centers.iloc[ind]).sum(axis=1))
 
         # Lagged features
         for k in lag_features:
@@ -172,7 +183,7 @@ class FeatureProcessing:
         # Trigonometric features
         for k in trigonometric_features:
             func, key = k.split('__')
-            self.x[k] = getattr(np, func)(self.x[key])
+            x[k] = getattr(np, func)(data[key])
 
         return x
 
@@ -379,9 +390,9 @@ class FeatureProcessing:
                 sin_feature = np.sin(self.x[key])
                 score = self._analyse_feature(sin_feature)
                 if self._accept_feature(score):
-                    score['sin__' + key] = score
+                    scores['sin__' + key] = score
 
-                # Cosinus feature
+                # Co sinus feature
                 cos_feature = np.cos(self.x[key])
                 score = self._analyse_feature(cos_feature)
                 if self._accept_feature(score):
@@ -497,9 +508,9 @@ class FeatureProcessing:
 
             # Determine clusters
             clusters = min(max(int(np.log10(len(self.originalInput)) * 8), 8), len(self.originalInput.keys()))
-            kmeans = MiniBatchKMeans(n_clusters=clusters)
+            k_means = MiniBatchKMeans(n_clusters=clusters)
             column_names = ['dist__{}_{}'.format(i, clusters) for i in range(clusters)]
-            distances = pd.DataFrame(columns=column_names, data=kmeans.fit_transform(data))
+            distances = pd.DataFrame(columns=column_names, data=k_means.fit_transform(data))
             distances = distances.clip(lower=1e-12, upper=1e12).fillna(0)
 
             # Analyse correlation
@@ -515,7 +526,7 @@ class FeatureProcessing:
                 self.x[k] = distances[k]
 
             # Create output
-            centers = pd.DataFrame(columns=self.originalInput.keys(), data=kmeans.cluster_centers_)
+            centers = pd.DataFrame(columns=self.originalInput.keys(), data=k_means.cluster_centers_)
             centers = centers.append(means, ignore_index=True)
             centers = centers.append(stds, ignore_index=True)
             centers.to_csv(self.folder + 'KMeans_v{}.csv'.format(self.version), index=False)
@@ -524,22 +535,22 @@ class FeatureProcessing:
 
     def _add_diff_features(self):
         """
-        Analyses whether the differenced signal of the data should be included.
+        Analyses whether the diff signal of the data should be included.
         """
 
         # Check if we're allowed
         if self.maxDiff == 0:
-            print('[Features] Differenced features skipped, max diff = 0')
+            print('[Features] Diff features skipped, max diff = 0')
             return
 
         # Check if exist
         if os.path.exists(self.folder + 'diffFeatures_v{}.json'.format(self.version)):
             self.diffFeatures = json.load(open(self.folder + 'diffFeatures_v{}.json'.format(self.version), 'r'))
-            print('[Features] Loaded {} differenced features'.format(len(self.diffFeatures)))
+            print('[Features] Loaded {} diff features'.format(len(self.diffFeatures)))
 
         # If not exist, execute
         else:
-            print('[Features] Analysing differenced features')
+            print('[Features] Analysing diff features')
             # Copy data so we can diff without altering original data
             keys = self.originalInput.keys()
             diff_input = copy.copy(self.originalInput)
@@ -557,11 +568,11 @@ class FeatureProcessing:
             self.diffFeatures = self._select_features(scores)
             print('[Features] Added {} differenced features'.format(len(self.diffFeatures)))
 
-        # Add Differenced Features
+        # Add Diff Features
         for k in self.diffFeatures:
             key, diff = k.split('__diff__')
             feature = self.x[key]
-            for i in range(1, diff):
+            for i in range(1, int(diff)):
                 feature = feature.diff().clip(lower=1e-12, upper=1e12).fillna(0)
             self.x[k] = feature
         json.dump(self.diffFeatures, open(self.folder + 'diffFeatures_v{}.json'.format(self.version), 'w'))
