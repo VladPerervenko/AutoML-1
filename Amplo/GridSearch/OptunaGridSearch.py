@@ -38,6 +38,7 @@ class OptunaGridSearch:
                 raise ValueError('Model mode unknown')
 
     def get_params(self, trial):
+        # todo support suggest_loguniform
         if type(self.model).__name__ == 'LinearRegression':
             return {}
         elif type(self.model).__name__ == 'Lasso' or \
@@ -66,8 +67,8 @@ class OptunaGridSearch:
         elif type(self.model).__name__ == 'BaggingRegressor':
             return {
                 'n_estimators': trial.suggest_int('n_estimators', 10, 250),
-                'max_samples': trial.suggest_uniform('max_samples', 0, 1),
-                'max_features': trial.suggest_uniform('max_features', 0, 1),
+                'max_samples': trial.suggest_uniform('max_samples', 0.5, 1),
+                'max_features': trial.suggest_uniform('max_features', 0.5, 1),
             }
         elif type(self.model).__name__ == 'CatBoostRegressor':
             return {
@@ -85,8 +86,8 @@ class OptunaGridSearch:
                 'max_depth': trial.suggest_int('max_depth', 3, min(10, int(np.log2(self.samples)))),
                 'n_estimators': trial.suggest_int('n_estimators', 100, 500),
                 'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, min(1000, int(self.samples / 10))),
-                'max_features': trial.suggest_uniform('max_features', 0, 1),
-                'subsample': trial.suggest_uniform('subsample', 0, 1),
+                'max_features': trial.suggest_uniform('max_features', 0.5, 1),
+                'subsample': trial.suggest_uniform('subsample', 0.5, 1),
             }
         elif type(self.model).__name__ == 'HistGradientBoostingRegressor':
             return {
@@ -135,8 +136,8 @@ class OptunaGridSearch:
             return {
                 'num_leaves': trial.suggest_int('num_leaves', 10, 150),
                 'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, min(1000, int(self.samples / 10))),
-                'min_child_weight': trial.suggest_uniform('min_child_weight', 0, 1),
-                'subsample': trial.suggest_uniform('subsample', 0, 1),
+                'min_sum_hessian_in_leaf': trial.suggest_uniform('min_sum_hessian_in_leaf', 1e-3, 0.5),
+                'subsample': trial.suggest_uniform('subsample', 0.5, 1),
                 'colsample_bytree': trial.suggest_uniform('colsample_bytree', 0, 1),
                 'reg_alpha': trial.suggest_uniform('reg_alpha', 0, 1),
                 'reg_lambda': trial.suggest_uniform('reg_lambda', 0, 1),
@@ -146,8 +147,8 @@ class OptunaGridSearch:
         elif type(self.model).__name__ == 'BaggingClassifier':
             return {
                 'n_estimators': trial.suggest_int('n_estimators', 10, 250),
-                'max_samples': trial.suggest_uniform('max_samples', 0, 1),
-                'max_features': trial.suggest_uniform('max_features', 0, 1),
+                'max_samples': trial.suggest_uniform('max_samples', 0.5, 1),
+                'max_features': trial.suggest_uniform('max_features', 0.5, 1),
             }
         elif type(self.model).__name__ == 'CatBoostClassifier':
             return {
@@ -167,8 +168,8 @@ class OptunaGridSearch:
                 'max_depth': trial.suggest_int('max_depth', 3, min(15, int(np.log2(self.samples)))),
                 'n_estimators': trial.suggest_int('n_estimators', 100, 500),
                 'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, min(1000, int(self.samples / 10))),
-                'max_features': trial.suggest_uniform('max_features', 0, 1),
-                'subsample': trial.suggest_uniform('subsample', 0, 1),
+                'max_features': trial.suggest_uniform('max_features', 0.5, 1),
+                'subsample': trial.suggest_uniform('subsample', 0.5, 1),
             }
         elif type(self.model).__name__ == 'HistGradientBoostingClassifier':
             return {
@@ -224,7 +225,7 @@ class OptunaGridSearch:
                 "bagging_fraction": trial.suggest_uniform("bagging_fraction", 0.4, 1.0),
                 "bagging_freq": trial.suggest_int("bagging_freq", 1, 7),
                 "min_data_in_leaf": trial.suggest_int("min_data_in_leaf", 1, min(1000, int(self.samples / 10))),
-                'callbacks': optuna.integration.LightGBMPruningCallback(trial, "neg_f1", "valid_1"),
+                'callbacks': optuna.integration.LightGBMPruningCallback(trial, "f1", "valid_1"),
             }
         else:
             # Raise error if nothing is returned
