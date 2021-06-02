@@ -2,7 +2,7 @@ import copy
 import numpy as np
 import pandas as pd
 import lightgbm as lgb
-from sklearn.metrics import f1_score
+from sklearn.metrics import log_loss
 from sklearn.model_selection import train_test_split
 
 
@@ -117,22 +117,11 @@ class LGBMClassifier:
         return params
 
     def eval_function(self, prediction, d_train):
-        # todo this should depend on the trial 'metric' parameter :(
         target = d_train.get_label()
         weight = d_train.get_weight()
-        if self.params['objective'] == 'binary':
-            average = 'binary'
-            prediction = np.round(prediction)
-        else:
-            average = 'micro'
+        if self.params['objective'] == 'multiclass':
             prediction = prediction.reshape((-1, len(self.classes_)))
-            prediction = np.argmax(prediction, axis=1)
-
-        # Shape check
-        assert prediction.shape == target.shape
 
         # Return f1 score
-        return "neg_f1", - f1_score(target, prediction,
-                                    sample_weight=weight,
-                                    average=average, zero_division=0), False
+        return "neg_log_loss", - log_loss(target, prediction, sample_weight=weight), True
 
