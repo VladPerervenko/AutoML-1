@@ -34,8 +34,8 @@ from .GridSearch.OptunaGridSearch import OptunaGridSearch
 
 # noinspection PyUnresolvedReferences
 class Pipeline:
+    # todo implement time budget feature processor
     # todo implement data type detector
-    # todo remove _get_hyper_parameters from here, fully implement in BaseGridSearch and HalvingGridSearch
 
     def __init__(self,
                  target,
@@ -59,6 +59,7 @@ class Pipeline:
                  max_diff=2,
                  information_threshold=0.99,
                  extract_features=True,
+                 feature_timeout=3600,
 
                  # Sequencing
                  sequence=False,
@@ -75,7 +76,8 @@ class Pipeline:
 
                  # Grid Search
                  grid_search_type='optuna',
-                 optuna_time_budget=3600,
+                 grid_search_time_budget=3600,
+                 grid_search_candidates=250,
                  grid_search_iterations=3,
 
                  # Production
@@ -148,6 +150,7 @@ class Pipeline:
         self.maxLags = max_lags
         self.maxDiff = max_diff
         self.informationThreshold = information_threshold
+        self.featureTimeout = feature_timeout
 
         # Sequence Params
         self.sequence = sequence
@@ -164,7 +167,8 @@ class Pipeline:
 
         # Grid Search params
         self.gridSearchType = grid_search_type.lower()
-        self.optunaBudget = optuna_time_budget
+        self.gridSearchTimeout = grid_search_time_budget
+        self.gridSearchCandidates = grid_search_candidates
         self.gridSearchIterations = grid_search_iterations
 
         # Instance initiating
@@ -188,7 +192,7 @@ class Pipeline:
                                             outlier_removal=self.outlierRemoval, z_score_threshold=self.zScoreThreshold,
                                             folder=self.mainDir + 'Data/', version=self.version)
         self.featureProcessor = FeatureProcessing(mode=self.mode, max_lags=self.maxLags, max_diff=self.maxDiff,
-                                                  extract_features=self.extractFeatures,
+                                                  extract_features=self.extractFeatures, timeout=self.featureTimeout,
                                                   information_threshold=self.informationThreshold,
                                                   folder=self.mainDir + 'Features/', version=self.version)
 
@@ -532,13 +536,15 @@ class Pipeline:
         # todo change gridsearch param 'scoring' to 'objective'
         if self.gridSearchType == 'base':
             grid_search = BaseGridSearch(model, params=parameter_set, cv=cv, scoring=self.objective,
+                                         candidates=self.gridSearchCandidates, timeout=self.gridSearchTimeout,
                                          verbose=self.verbose)
         elif self.gridSearchType == 'halving':
             grid_search = HalvingGridSearch(model, params=parameter_set, cv=cv, scoring=self.objective,
-                                            verbose=self.verbose)
+                                            candidates=self.candidates, verbose=self.verbose)
         elif self.gridSearchType == 'optuna':
-            grid_search = OptunaGridSearch(model, params=parameter_set, timeout=self.optunaBudget,
-                                           cv=cv, scoring=self.objective, verbose=self.verbose)
+            grid_search = OptunaGridSearch(model, params=parameter_set, timeout=self.gridSearchTimeout, cv=cv,
+                                           candidates=self.gridSearchCandidates, scoring=self.objective,
+                                           verbose=self.verbose)
         else:
             raise NotImplementedError('Only Base, Halving and Optuna are implemented.')
         # Get results
@@ -577,9 +583,6 @@ class Pipeline:
                                   in stacking_models_str]
         models = Modelling(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
         models_str = [type(m).__name__ for m in models]
-        print(stacking_models_params)
-        print([models[models_str.index(sms)] for sms in stacking_models_str])
-        print([stacking_models_params[i] for i, sms in enumerate(stacking_models_str)])
         stacking_models = [(sms, models[models_str.index(sms)].set_params(**stacking_models_params[i]))
                            for i, sms in enumerate(stacking_models_str)]
 
@@ -588,7 +591,7 @@ class Pipeline:
             stacking_models += [
                 ('KNN', neighbors.KNeighborsRegressor()),
                 ('DT', tree.DecisionTreeRegressor()),
-                ('LogReg', linear_model.LogisticRegression()),
+                ('LogReg', linear_model.LinearRegression()),
             ]
             if len(self.x) < 5000:
                 stacking_models.append(('SVR', svm.SVR()))
@@ -637,7 +640,6 @@ class Pipeline:
         for (t, v) in tqdm(cv.split(x, y)):
             start_time = time.time()
             xt, xv, yt, yv = x[t], x[v], y[t].reshape((-1)), y[v].reshape((-1))
-            print('[DEBUG] ', stack)
             model = copy.deepcopy(stack)
             model.fit(xt, yt)
             score.append(self.scorer(model, xv, yv))
@@ -662,6 +664,7 @@ class Pipeline:
             self.validate(stack, feature_set)
 
     def validate(self, model, feature_set, params=None):
+        # todo adopt to Documentation
         """
         Just a wrapper for the outside.
         Parameters:
@@ -684,6 +687,7 @@ class Pipeline:
         self._validate_result(model, params, feature_set)
 
     def _validate_result(self, master_model, params, feature_set):
+        # todo move to outside Documentation
         print('[AutoML] Validating results for {} ({} {} features) (params: {})'.format(
             type(master_model).__name__, len(self.colKeep[feature_set]), feature_set, params))
 
@@ -967,7 +971,6 @@ class Pipeline:
         pass
 
     def _convert_data(self, data):
-        # todo implement
         # Load files
         folder = 'Production/v{}/'.format(self.version)
         features = json.load(open(self.mainDir + folder + 'Features.json', 'r'))

@@ -27,6 +27,7 @@ class TestHalvingGridSearch(unittest.TestCase):
             grid_search = HalvingGridSearch(model,
                                             cv=KFold(n_splits=3),
                                             verbose=0,
+                                            candidates=2,
                                             scoring='r2')
             results = grid_search.fit(self.rx, self.ry)
 
@@ -43,6 +44,7 @@ class TestHalvingGridSearch(unittest.TestCase):
             grid_search = HalvingGridSearch(model,
                                             cv=KFold(n_splits=3),
                                             verbose=0,
+                                            candidates=2,
                                             scoring='r2')
             results = grid_search.fit(self.rx, self.ry)
 
@@ -60,6 +62,7 @@ class TestHalvingGridSearch(unittest.TestCase):
             grid_search = HalvingGridSearch(model,
                                             cv=StratifiedKFold(n_splits=3),
                                             verbose=0,
+                                            candidates=2,
                                             scoring='accuracy')
             results = grid_search.fit(self.cx, self.cy)
 
@@ -76,6 +79,7 @@ class TestHalvingGridSearch(unittest.TestCase):
             grid_search = HalvingGridSearch(model,
                                             cv=StratifiedKFold(n_splits=3),
                                             verbose=0,
+                                            candidates=2,
                                             scoring='accuracy')
             results = grid_search.fit(self.cx, self.cy)
 

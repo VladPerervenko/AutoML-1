@@ -26,10 +26,12 @@ class TestPipeline(unittest.TestCase):
                             project='AutoReg',
                             mode='regression',
                             objective='r2',
-                            optuna_time_budget=10,
+                            feature_timeout=5,
+                            grid_search_time_budget=10,
+                            grid_search_candidates=2,
                             plot_eda=False,
                             process_data=True,
-                            validate_result=True,
+                            validate_result=False,
                             )
         pipeline.fit(self.r_data)
 
@@ -51,11 +53,12 @@ class TestPipeline(unittest.TestCase):
                             project='AutoClass',
                             mode='classification',
                             objective='neg_log_loss',
-                            optuna_time_budget=10,
-                            grid_search_iterations=0,
-                            plot_eda=True,
+                            feature_timeout=5,
+                            grid_search_time_budget=10,
+                            grid_search_candidates=2,
+                            plot_eda=False,
                             process_data=True,
-                            validate_result=True,
+                            validate_result=False,
                             )
         pipeline.fit(self.c_data)
 
@@ -69,7 +72,7 @@ class TestPipeline(unittest.TestCase):
 
         # Pipeline Prediction
         prediction = pipeline.predict_proba(self.c_data)
-        assert log_loss(self.c_data['target'], prediction) > -0.5
+        assert log_loss(self.c_data['target'], prediction) > -1
 
 
 @pytest.fixture(scope="session", autouse=True)

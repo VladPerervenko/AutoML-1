@@ -11,14 +11,15 @@ from sklearn.metrics import SCORERS
 
 class OptunaGridSearch:
 
-    def __init__(self, model, params=None, cv=KFold(n_splits=3), scoring='accuracy', verbose=0, timeout=3600, n_trials=250):
+    def __init__(self, model, params=None, cv=KFold(n_splits=3), scoring='accuracy', verbose=0, timeout=3600,
+                 candidates=250):
         self.model = model
         self.params = params
         self.cv = cv
         self.scoring = SCORERS[scoring] if isinstance(scoring, str) else scoring
         self.verbose = verbose
         self.timeout = timeout
-        self.nTrials = n_trials
+        self.nTrials = candidates
         self.x, self.y = None, None
         self.binary = True
         self.samples = None

@@ -15,12 +15,14 @@ from sklearn.model_selection import HalvingRandomSearchCV
 
 class HalvingGridSearch:
 
-    def __init__(self, model, params=None, cv=KFold(n_splits=3), scoring='accuracy', verbose=0):
+    def __init__(self, model, params=None, cv=KFold(n_splits=3), scoring='accuracy',
+                 candidates=250, verbose=0):
         # Params
         self.model = model
         self.params = params
         self.cv = cv
         self.scoring = scoring
+        self.candidates = candidates
         self.verbose = verbose
         self.samples = None
         self.binary = False
@@ -257,7 +259,7 @@ class HalvingGridSearch:
         # Set up and run grid search
         halving_random_search = HalvingRandomSearchCV(self.model,
                                                       self.params,
-                                                      n_candidates=200,
+                                                      n_candidates=self.candidates,
                                                       resource=self.resource,
                                                       max_resources=self.max_resource,
                                                       min_resources=self.min_resource,

@@ -15,7 +15,7 @@ from sklearn.metrics import SCORERS
 class BaseGridSearch:
 
     def __init__(self, model, params=None, cv=None, scoring='accuracy',
-                 timeout=3600, n_trials=100, verbose=0):
+                 timeout=3600, candidates=250, verbose=0):
         """
         Basic exhaustive grid search.
         @param model: Model object to optimize
@@ -28,7 +28,7 @@ class BaseGridSearch:
         self.cv = cv
         self.scoring = SCORERS[scoring] if isinstance(scoring, str) else scoring
         self.timeout = timeout
-        self.nTrials = n_trials
+        self.nTrials = candidates
         self.verbose = verbose
         self.mode = 'regression' if 'Regressor' in type(model).__name__ else 'classification'
         self.binary = True

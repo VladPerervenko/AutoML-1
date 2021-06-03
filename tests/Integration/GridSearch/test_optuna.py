@@ -27,7 +27,7 @@ class TestOptunaGridSearch(unittest.TestCase):
                                            cv=KFold(n_splits=3),
                                            verbose=0,
                                            timeout=10,
-                                           n_trials=2,
+                                           candidates=2,
                                            scoring='r2')
             results = grid_search.fit(self.rx, self.ry)
 
@@ -46,7 +46,7 @@ class TestOptunaGridSearch(unittest.TestCase):
                                            cv=KFold(n_splits=3),
                                            verbose=0,
                                            timeout=10,
-                                           n_trials=2,
+                                           candidates=2,
                                            scoring='r2')
             results = grid_search.fit(self.rx, self.ry)
 
@@ -65,7 +65,7 @@ class TestOptunaGridSearch(unittest.TestCase):
                                            cv=StratifiedKFold(n_splits=3),
                                            verbose=0,
                                            timeout=10,
-                                           n_trials=2,
+                                           candidates=2,
                                            scoring='accuracy')
             results = grid_search.fit(self.cx, self.cy)
 
@@ -84,7 +84,7 @@ class TestOptunaGridSearch(unittest.TestCase):
                                            cv=StratifiedKFold(n_splits=3),
                                            verbose=0,
                                            timeout=10,
-                                           n_trials=2,
+                                           candidates=2,
                                            scoring='accuracy')
             results = grid_search.fit(self.cx, self.cy)
 
