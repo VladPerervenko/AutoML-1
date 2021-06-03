@@ -14,6 +14,8 @@ class OptunaGridSearch:
     def __init__(self, model, params=None, cv=KFold(n_splits=3), scoring='accuracy', verbose=0, timeout=3600,
                  candidates=250):
         self.model = model
+        if hasattr(model, 'is_fitted'):
+            assert not model.is_fitted(), 'Model already fitted'
         self.params = params
         self.cv = cv
         self.scoring = SCORERS[scoring] if isinstance(scoring, str) else scoring
@@ -73,6 +75,7 @@ class OptunaGridSearch:
             }
         elif type(self.model).__name__ == 'CatBoostRegressor':
             return {
+                'n_estimators': trial.suggest_int('n_estimators', 500, 2000),
                 'loss_function': trial.suggest_categorical('loss', ['MAE', 'RMSE']),
                 'learning_rate': trial.suggest_loguniform('learning_rate', 0.001, 0.5),
                 'l2_leaf_reg': trial.suggest_uniform('l2_leaf_reg', 0, 10),
@@ -85,7 +88,7 @@ class OptunaGridSearch:
                 'loss': trial.suggest_categorical('loss', ['ls', 'lad', 'huber']),
                 'learning_rate': trial.suggest_loguniform('learning_rate', 0.001, 0.5),
                 'max_depth': trial.suggest_int('max_depth', 3, min(10, int(np.log2(self.samples)))),
-                'n_estimators': trial.suggest_int('n_estimators', 100, 500),
+                'n_estimators': trial.suggest_int('n_estimators', 100, 1000),
                 'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, min(1000, int(self.samples / 10))),
                 'max_features': trial.suggest_uniform('max_features', 0.5, 1),
                 'subsample': trial.suggest_uniform('subsample', 0.5, 1),
@@ -94,7 +97,7 @@ class OptunaGridSearch:
             return {
                 'loss': trial.suggest_categorical('loss', ['least_squares', 'least_absolute_deviation']),
                 'learning_rate': trial.suggest_loguniform('learning_rate', 0.001, 0.5),
-                'max_iter': trial.suggest_int('max_iter', 100, 250),
+                'max_iter': trial.suggest_int('max_iter', 100, 1000),
                 'max_leaf_nodes': trial.suggest_int('max_leaf_nodes', 30, 150),
                 'max_depth': trial.suggest_int('max_depth', 3, min(10, int(np.log2(self.samples)))),
                 'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, min(1000, int(self.samples / 10))),
@@ -104,6 +107,7 @@ class OptunaGridSearch:
             }
         elif type(self.model).__name__ == 'RandomForestRegressor':
             return {
+                'n_estimators': trial.suggest_int('n_estimators', 50, 1000),
                 'criterion': trial.suggest_categorical('criterion', ['mse', 'mae']),
                 'max_depth': trial.suggest_int('max_depth', 3, min(15, int(np.log2(self.samples)))),
                 'max_features': trial.suggest_categorical('max_features', ['auto', 'sqrt']),
@@ -135,6 +139,7 @@ class OptunaGridSearch:
             return param
         elif type(self.model).__name__ == 'LGBMRegressor':
             return {
+                'num_iterations': trial.suggest_int('num_iterations', 100, 500),
                 'num_leaves': trial.suggest_int('num_leaves', 10, 150),
                 'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, min(1000, int(self.samples / 10))),
                 'min_sum_hessian_in_leaf': trial.suggest_uniform('min_sum_hessian_in_leaf', 1e-3, 0.5),
@@ -153,6 +158,7 @@ class OptunaGridSearch:
             }
         elif type(self.model).__name__ == 'CatBoostClassifier':
             return {
+                'n_estimators': trial.suggest_int('n_estimators', 500, 2000),
                 "verbose": 0,
                 'early_stopping_rounds': 100,
                 'loss_function': 'Logloss' if self.binary else 'MultiClass',
@@ -167,7 +173,7 @@ class OptunaGridSearch:
                 'loss': trial.suggest_categorical('loss', ['deviance', 'exponential']),
                 'learning_rate': trial.suggest_loguniform('learning_rate', 0.001, 0.5),
                 'max_depth': trial.suggest_int('max_depth', 3, min(15, int(np.log2(self.samples)))),
-                'n_estimators': trial.suggest_int('n_estimators', 100, 500),
+                'n_estimators': trial.suggest_int('n_estimators', 100, 1000),
                 'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, min(1000, int(self.samples / 10))),
                 'max_features': trial.suggest_uniform('max_features', 0.5, 1),
                 'subsample': trial.suggest_uniform('subsample', 0.5, 1),
@@ -175,7 +181,7 @@ class OptunaGridSearch:
         elif type(self.model).__name__ == 'HistGradientBoostingClassifier':
             return {
                 'learning_rate': trial.suggest_loguniform('learning_rate', 0.001, 0.5),
-                'max_iter': trial.suggest_int('max_iter', 100, 250),
+                'max_iter': trial.suggest_int('max_iter', 100, 1000),
                 'max_leaf_nodes': trial.suggest_int('max_leaf_nodes', 30, 150),
                 'max_depth': trial.suggest_int('max_depth', 3, min(10, int(np.log2(self.samples)))),
                 'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, min(1000, int(self.samples / 10))),
@@ -185,6 +191,7 @@ class OptunaGridSearch:
             }
         elif type(self.model).__name__ == 'RandomForestClassifier':
             return {
+                'n_estimators': trial.suggest_int('n_estimators', 50, 1000),
                 'criterion': trial.suggest_categorical('criterion', ['gini', 'entropy']),
                 'max_depth': trial.suggest_int('max_depth', 3, min(15, int(np.log2(self.samples)))),
                 'max_features': trial.suggest_categorical('max_features', ['auto', 'sqrt']),
@@ -215,6 +222,7 @@ class OptunaGridSearch:
             return param
         elif type(self.model).__name__ == 'LGBMClassifier':
             return {
+                'num_iterations': trial.suggest_int('num_iterations', 100, 500),
                 "objective": "binary" if self.binary else 'multiclass',
                 "metric": trial.suggest_categorical("metric", ['rmse', 'auc', 'average_precision', 'binary_logloss']),
                 "verbosity": -1,
@@ -269,6 +277,7 @@ class OptunaGridSearch:
         # Metrics
         scores = []
         times = []
+        master = copy.deepcopy(self.model)
 
         # Cross Validation
         for t, v in self.cv.split(self.x, self.y):
@@ -277,7 +286,7 @@ class OptunaGridSearch:
 
             # Train model
             t_start = time.time()
-            model = copy.deepcopy(self.model)
+            model = copy.deepcopy(master)
             model.set_params(**self.get_params(trial))
             model.fit(xt, yt)
 

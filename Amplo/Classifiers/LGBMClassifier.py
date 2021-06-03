@@ -52,7 +52,7 @@ class LGBMClassifier:
             y = y.reshape((-1, 1))
 
         # Split & Convert data
-        train_x, test_x, train_y, test_y = train_test_split(x, y, test_size=0.1)
+        train_x, test_x, train_y, test_y = train_test_split(x, y, test_size=0.1, stratify=y, shuffle=True)
         d_train = self.convert_to_dataset(train_x, train_y)
         d_test = self.convert_to_dataset(test_x, test_y)
 
@@ -123,5 +123,5 @@ class LGBMClassifier:
             prediction = prediction.reshape((-1, len(self.classes_)))
 
         # Return f1 score
-        return "neg_log_loss", - log_loss(target, prediction, sample_weight=weight), True
+        return "neg_log_loss", - log_loss(target, prediction, sample_weight=weight, labels=self.classes_), True
 

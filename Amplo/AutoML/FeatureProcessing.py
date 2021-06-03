@@ -38,11 +38,13 @@ class FeatureProcessing:
         self.timeout = timeout
         # Register
         self.baseScore = {}
-        self.coLinearFeatures = None
-        self.crossFeatures = None
-        self.kMeansFeatures = None
-        self.diffFeatures = None
-        self.laggedFeatures = None
+        self.coLinearFeatures = []
+        self.addFeatures = []
+        self.crossFeatures = []
+        self.trigoFeatures = []
+        self.kMeansFeatures = []
+        self.laggedFeatures = []
+        self.diffFeatures = []
         # Parameters
         self.maxLags = max_lags
         self.maxDiff = max_diff
@@ -180,14 +182,14 @@ class FeatureProcessing:
         # Lagged features
         for k in lag_features:
             key, lag = k.split('__lag__')
-            x.loc[:, key] = data[key].shift(-int(lag), fill_value=0)
+            x.loc[:, k] = data[key].shift(-int(lag), fill_value=0)
 
         # Trigonometric features
         for k in trigonometric_features:
             func, key = k.split('__')
-            x[k] = getattr(np, func)(data[key])
+            x.loc[:, k] = getattr(np, func)(data[key])
 
-        return x
+        return x[features]
 
     def export_function(self):
         code = inspect.getsource(self.transform)
@@ -653,12 +655,12 @@ class FeatureProcessing:
         sfi = fi.sum()
         ind = np.flip(np.argsort(fi))
         # Info Threshold
-        ind_keep = [ind[i] for i in range(len(ind)) if fi[ind[:i]].sum() <= self.informationThreshold * sfi]
+        ind_keep = [ind[i] for i in range(len(ind)) if fi[ind[:i]].sum() <= 0.95 * sfi]
         threshold = self.x.keys()[ind_keep].to_list()
         ind_keep = [ind[i] for i in range(len(ind)) if fi[i] > sfi / 100]
         increment = self.x.keys()[ind_keep].to_list()
-        print('[Features] Selected {} features with RF thresholded'.format(len(threshold)))
-        print('[Features] Selected {} features with RF increment'.format(len(increment)))
+        print('[Features] Selected {} features with 95% RF threshold'.format(len(threshold)))
+        print('[Features] Selected {} features with 1% RF increment'.format(len(increment)))
         return threshold, increment
 
     def _borutapy(self):

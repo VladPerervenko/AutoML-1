@@ -1,8 +1,9 @@
 import unittest
 import numpy as np
+import pandas as pd
 from sklearn.metrics import SCORERS
 from sklearn.base import clone
-from sklearn.datasets import load_iris
+from sklearn.datasets import make_classification
 from Amplo.Classifiers import XGBClassifier
 
 
@@ -10,7 +11,8 @@ class TestXGBClassifier(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.x, cls.y = load_iris(return_X_y=True, as_frame=True)
+        x, y = make_classification(n_classes=5, n_informative=15)
+        cls.x, cls.y = pd.DataFrame(x), pd.Series(y)
 
     def test_set_params(self):
         model = XGBClassifier()
@@ -76,3 +78,13 @@ class TestXGBClassifier(unittest.TestCase):
         SCORERS['neg_log_loss'](model, self.x, self.y)
         SCORERS['accuracy'](model, self.x, self.y)
         SCORERS['f1_micro'](model, self.x, self.y)
+
+    def test_binary(self):
+        model = XGBClassifier()
+        x, y = make_classification()
+        model.fit(x, y)
+        prediction = model.predict(x)
+        proba = model.predict_proba(x)
+        SCORERS['neg_log_loss'](model, x, y)
+        SCORERS['accuracy'](model, x, y)
+        SCORERS['f1_micro'](model, x, y)

@@ -1,5 +1,6 @@
 import re
 import os
+import copy
 import inspect
 import numpy as np
 import pandas as pd
@@ -7,6 +8,7 @@ from ..Utils import clean_keys
 
 
 class DataProcessing:
+    # todo implement data type detector
 
     def __init__(self,
                  target=None,
@@ -64,18 +66,46 @@ class DataProcessing:
         self.outlierRemoval = outlier_removal
         self.zScoreThreshold = z_score_threshold
 
+        # Statistics for Documenting
+        self.removedDuplicateRows = 0
+        self.removedDuplicateColumns = 0
+        self.imputedMissingValues = 0
+        self.removedConstantColumns = 0
+
     def clean(self, data):
         print('[Data] Data Cleaning Started, ({} x {}) samples'.format(len(data), len(data.keys())))
         if len(data[self.target].unique()) == 2:
             self.mode = 'classification'
 
-        # Clean
+        # Note down
+        rows, columns = len(data), len(data.keys())
+
+        # Clean Keys
         data = clean_keys(data)
+
+        # Remove Duplicates
         data = self.remove_duplicates(data)
+        # Note
+        self.removedDuplicateColumns = len(data.keys()) - columns
+        self.removedDuplicateRows = len(data) - rows
+
+        # Convert data types
         data = self.convert_data_types(data)
+        # Remove outliers
         data = self.remove_outliers(data)
+        # Note
+        self.imputedMissingValues = np.sum(np.isnan(data.values)) + np.sum(data.values == np.Inf) + \
+                                    np.sum(data.values == -np.Inf)
+
+        # Remove missing values
         data = self.remove_missing_values(data)
-        data = self._remove_constants(data)
+        # Note
+        columns = len(data.keys())
+
+        # Remove Constants
+        data = self.remove_constants(data)
+        # Note
+        self.removedConstantColumns = len(data.keys()) - columns
 
         # Finish
         self._store(data)
@@ -95,8 +125,6 @@ class DataProcessing:
                     dummies = dummies.rename(
                         columns={dummy_key: key + '_' + re.sub('[^a-z0-9]', '_', str(dummy_key).lower())})
                 data = data.drop(key, axis=1).join(dummies)
-        if self.target in data.keys():
-            data.loc[:, self.target] = pd.to_numeric(data[self.target], errors='coerce')
         return data
 
     @staticmethod
@@ -107,7 +135,7 @@ class DataProcessing:
         return data
 
     @staticmethod
-    def _remove_constants(data):
+    def remove_constants(data):
         # Remove Constants
         data = data.drop(columns=data.columns[data.nunique() == 1])
         return data

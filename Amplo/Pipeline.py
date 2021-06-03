@@ -24,6 +24,7 @@ from sklearn.preprocessing import StandardScaler
 from . import Utils
 from .AutoML.Sequence import Sequence
 from .AutoML.Modelling import Modelling
+from .AutoML.Documenting import Documenting
 from .AutoML.DataExploring import DataExploring
 from .AutoML.DataProcessing import DataProcessing
 from .AutoML.FeatureProcessing import FeatureProcessing
@@ -34,15 +35,14 @@ from .GridSearch.OptunaGridSearch import OptunaGridSearch
 
 # noinspection PyUnresolvedReferences
 class Pipeline:
-    # todo implement time budget feature processor
-    # todo implement data type detector
+    # todo integrate minorVersion (also with folder)
 
     def __init__(self,
                  target,
                  project='',
                  version=None,
                  mode='regression',
-                 objective=None,
+                 objective='r2',
                  fast_run=False,
 
                  # Data Processing
@@ -70,9 +70,9 @@ class Pipeline:
 
                  # Initial Modelling
                  normalize=False,
-                 shuffle=False,
+                 shuffle=True,
                  cv_splits=3,
-                 store_models=True,
+                 store_models=False,
 
                  # Grid Search
                  grid_search_type='optuna',
@@ -80,14 +80,23 @@ class Pipeline:
                  grid_search_candidates=250,
                  grid_search_iterations=3,
 
+                 # Stacking
+                 stacking=False,
+
                  # Production
                  custom_code='',
 
                  # Flags
-                 plot_eda=None,
-                 process_data=None,
-                 validate_result=None,
+                 plot_eda=True,
+                 process_data=True,
+                 document_results=True,
                  verbose=1):
+        # Production initiation
+        self.bestModel = None
+        self.bestFeatures = None
+        self.bestScaler = None
+        self.bestOutputScaler = None
+
         # Starting
         print('\n\n*** Starting Amplo AutoML - {} ***\n\n'.format(project))
 
@@ -135,7 +144,7 @@ class Pipeline:
         self.includeOutput = include_output
         self.plotEDA = plot_eda
         self.processData = process_data
-        self.validateResults = validate_result
+        self.documentResults = document_results
 
         # Data Processing params
         self.numCols = [] if num_cols is None else num_cols
@@ -171,6 +180,9 @@ class Pipeline:
         self.gridSearchCandidates = grid_search_candidates
         self.gridSearchIterations = grid_search_iterations
 
+        # Stacking
+        self.stacking = stacking
+
         # Instance initiating
         self.x = None
         self.y = None
@@ -196,19 +208,13 @@ class Pipeline:
                                                   information_threshold=self.informationThreshold,
                                                   folder=self.mainDir + 'Features/', version=self.version)
 
-        # Store production
-        self.bestModel = None
-        self.bestFeatures = None
-        self.bestScaler = None
-        self.bestOutputScaler = None
-
     def _set_flags(self):
         if self.plotEDA is None:
             self.plotEDA = Utils.boolean_input('Make all EDA graphs?')
         if self.processData is None:
             self.processData = Utils.boolean_input('Process/prepare data?')
-        if self.validateResults is None:
-            self.validateResults = Utils.boolean_input('Validate results?')
+        if self.documentResults is None:
+            self.documentResults = Utils.boolean_input('Validate results?')
 
     def _load_version(self):
         if self.version is None:
@@ -243,7 +249,10 @@ class Pipeline:
             else:
                 if len(versions) == 0:
                     if self.verbose > 0:
-                        print('[AutoML] No Production files found. Setting version 0.')
+                        print('[AutoML] No Production files found. Starting fresh.')
+                    file = open(self.mainDir + 'changelog.txt', 'w')
+                    file.write('Dataset changelog. \nv0: Initial')
+                    file.close()
                     self.version = 0
                 else:
                     self.version = int(len(versions)) - 1
@@ -252,9 +261,17 @@ class Pipeline:
                     changelog = changelog[changelog.find('v{}'.format(self.version)):]
                     if self.verbose > 0:
                         print('[AutoML] Loading last version ({})'.format(changelog[:changelog.find('\n')]))
+                    self.bestModel = joblib.load(self.mainDir + 'Production/v{}/Model.joblib'.format(self.version))
+                    self.bestFeatures = json.load(open(self.mainDir + 'Production/v{}/Features.json'.format(self.version), 'r'))
+                    if self.normalize:
+                        self.bestScaler = pickle.load(open(self.mainDir + 'Production/v{}/Scaler.pickle'.format(self.version), 'rb'))
+                        if self.mode == 'regression':
+                            self.bestOutputScaler = pickle.load(open(self.mainDir +
+                                                                     'Production/v{}/OutputScaler.pickle'.format(
+                                self.version), 'rb'))
 
     def _create_dirs(self):
-        folders = ['', 'EDA', 'Data', 'Features', 'Production']
+        folders = ['', 'EDA', 'Data', 'Features', 'Documentation', 'Production']
         for folder in folders:
             try:
                 os.makedirs(self.mainDir + folder)
@@ -347,11 +364,21 @@ class Pipeline:
                 warnings.warn('Classes should be [0, 1, ...]')
 
     def _feature_processing(self):
-        # Extract
-        self.x = self.featureProcessor.extract(self.x, self.y)
+        # Check if exists
+        if os.path.exists(self.mainDir + 'Data/Extracted_v{}.csv'.format(self.version)):
+            print('[AutoML] Loading Extracted Features')
+            self.x = pd.read_csv(self.mainDir + 'Data/Extracted_v{}.csv'.format(self.version), index_col='index')
+            self.colKeep = json.load(open(self.mainDir + 'Features/Sets_v{}.json'.format(self.version), 'r'))
 
-        # Select
-        self.colKeep = self.featureProcessor.select(self.x, self.y)
+        else:
+            # Extract
+            self.x = self.featureProcessor.extract(self.x, self.y)
+
+            # Select
+            self.colKeep = self.featureProcessor.select(self.x, self.y)
+
+            # Store
+            self.x.to_csv(self.mainDir + 'Data/Extracted_v{}.csv'.format(self.version), index_label='index')
 
     def _initial_modelling(self):
         # Load existing results
@@ -473,7 +500,8 @@ class Pipeline:
         for iteration in range(self.gridSearchIterations):
             # Grab settings
             settings = results.iloc[iteration]
-            model = models[[i for i in range(len(models)) if type(models[i]).__name__ == settings['model']][0]]
+            model = copy.deepcopy(models[[i for i in range(len(models)) if type(models[i]).__name__ ==
+                                          settings['model']][0]])
             feature_set = settings['dataset']
 
             # Check whether exists
@@ -503,8 +531,8 @@ class Pipeline:
                 params = Utils.parse_json(grid_search_results.iloc[0]['params'])
 
             # Validate
-            if self.validateResults:
-                self._validate_result(model, params, feature_set)
+            if self.documentResults:
+                self.document(model.set_params(**params), feature_set)
 
     def _grid_search_iteration(self, model, parameter_set, feature_set):
         """
@@ -533,7 +561,6 @@ class Pipeline:
             cv = KFold(n_splits=self.cvSplits, shuffle=self.shuffle)
 
         # Select right hyper parameter optimizer
-        # todo change gridsearch param 'scoring' to 'objective'
         if self.gridSearchType == 'base':
             grid_search = BaseGridSearch(model, params=parameter_set, cv=cv, scoring=self.objective,
                                          candidates=self.gridSearchCandidates, timeout=self.gridSearchTimeout,
@@ -559,323 +586,132 @@ class Pipeline:
         --> classifiers need predict_proba
         --> level 1 needs to be ordinary least squares
         """
-        print('[AutoML] Creating Stacking Ensemble')
-        from sklearn import neighbors
-        from sklearn import tree
-        from sklearn import linear_model
-        from sklearn import svm
-        from sklearn import naive_bayes
-        from sklearn import ensemble
+        if self.stacking:
+            print('[AutoML] Creating Stacking Ensemble')
+            from sklearn import neighbors
+            from sklearn import tree
+            from sklearn import linear_model
+            from sklearn import svm
+            from sklearn import naive_bayes
+            from sklearn import ensemble
 
-        # Select feature set that has been picked most often for hyper parameter optimization
-        results = self._sort_results(self.results[np.logical_and(
-            self.results['type'] == 'Hyper Parameter',
-            self.results['version'] == self.version,
-        )])
-        feature_set = results['dataset'].value_counts().index[0]
-        print('[AutoML] Selected Stacking feature set: {}'.format(feature_set))
-        results = results[results['dataset'] == feature_set]
+            # Select feature set that has been picked most often for hyper parameter optimization
+            results = self._sort_results(self.results[np.logical_and(
+                self.results['type'] == 'Hyper Parameter',
+                self.results['version'] == self.version,
+            )])
+            feature_set = results['dataset'].value_counts().index[0]
+            print('[AutoML] Selected Stacking feature set: {}'.format(feature_set))
+            results = results[results['dataset'] == feature_set]
 
-        # Level 0, top n models + KNN, DT, Log Reg, (GNB), (SVM)
-        n_stacking_models = 3
-        stacking_models_str = results['model'].unique()[:n_stacking_models]
-        stacking_models_params = [results.iloc[np.where(results['model'] == sms)[0][0]]['params'] for sms
-                                  in stacking_models_str]
-        models = Modelling(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
-        models_str = [type(m).__name__ for m in models]
-        stacking_models = [(sms, models[models_str.index(sms)].set_params(**stacking_models_params[i]))
-                           for i, sms in enumerate(stacking_models_str)]
+            # Level 0, top n models + KNN, DT, Log Reg, (GNB), (SVM)
+            n_stacking_models = 3
+            stacking_models_str = results['model'].unique()[:n_stacking_models]
+            stacking_models_params = [Utils.parse_json(results.iloc[np.where(results['model'] == sms)[0][0]]['params'])
+                                      for sms in stacking_models_str]
+            models = Modelling(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
+            models_str = [type(m).__name__ for m in models]
+            stacking_models = [(sms, models[models_str.index(sms)].set_params(**stacking_models_params[i]))
+                               for i, sms in enumerate(stacking_models_str)]
 
-        # Prepare Stack
-        if self.mode == 'regression':
-            stacking_models += [
-                ('KNN', neighbors.KNeighborsRegressor()),
-                ('DT', tree.DecisionTreeRegressor()),
-                ('LogReg', linear_model.LinearRegression()),
-            ]
-            if len(self.x) < 5000:
-                stacking_models.append(('SVR', svm.SVR()))
-            level_one = linear_model.LinearRegression()
-            stack = ensemble.StackingRegressor(stacking_models, final_estimator=level_one)
-            cv = KFold(n_splits=self.cvSplits, shuffle=self.shuffle)
-        elif self.mode == 'classification':
-            stacking_models += [
-                ('KNN', neighbors.KNeighborsClassifier()),
-                ('DT', tree.DecisionTreeClassifier()),
-                ('Logistic', linear_model.LogisticRegression()),
-                ('NaiveBayes', naive_bayes.GaussianNB())
-            ]
-            if len(self.x) < 5000:
-                stacking_models.append(('SVC', svm.SVC()))
-            level_one = linear_model.LogisticRegression()
-            stack = ensemble.StackingClassifier(stacking_models, final_estimator=level_one)
-            cv = StratifiedKFold(n_splits=self.cvSplits, shuffle=self.shuffle)
-        else:
-            raise NotImplementedError('Unknown mode')
-        print('[AutoML] Stacked models: {}'.format([type(i[1]).__name__ for i in stacking_models]))
-
-        # Train stack
-        x, y = copy.deepcopy(self.x[self.colKeep[feature_set]]), copy.deepcopy(self.y)
-        if self.normalize:
-            normalize_features = [k for k in x.keys() if k not in self.dateCols + self.catCols]
-            scaler = pickle.load(open(self.mainDir + 'Features/Scaler_{}_{}.pickle'.format(feature_set, self.version),
-                                      'rb'))
-            x[normalize_features] = scaler.fit_transform(x[normalize_features])
+            # Prepare Stack
             if self.mode == 'regression':
-                output_scaler = pickle.load(open(self.mainDir + 'Features/OutputScaler_{}_{}.pickle'.format(
-                    feature_set, self.version), 'rb'))
-                y = pd.Series(output_scaler.fit_transform(y.values.reshape(-1, 1)).reshape(-1),
-                              name=self.target)
-        # Sequence if necessary
-        if self.sequence:
-            sequencer = Sequence(back=self.sequenceBack, forward=self.sequenceForward,
-                                 shift=self.sequenceShift, diff=self.sequenceDiff)
-            x, y = sequencer.convert(x, y)
-        if isinstance(x, pd.DataFrame):
-            x, y = x.to_numpy(), y.to_numpy()
+                if 'KNeighborsRegressor' not in stacking_models_str:
+                    stacking_models.append(('KNeighborsRegressor', neighbors.KNeighborsRegressor()))
+                if 'DecisionTreeRegressor' not in stacking_models_str:
+                    stacking_models.append(('DecisionTreeRegressor', tree.DecisionTreeRegressor()))
+                if 'LinearRegression' not in stacking_models_str:
+                    stacking_models.append(('LinearRegression', linear_model.LinearRegression()))
+                if 'SVR' not in stacking_models_str and len(self.x) < 5000:
+                    stacking_models.append(('SVR', svm.SVR()))
+                level_one = linear_model.LinearRegression()
+                stack = ensemble.StackingRegressor(stacking_models, final_estimator=level_one)
+                cv = KFold(n_splits=self.cvSplits, shuffle=self.shuffle)
+            elif self.mode == 'classification':
+                if 'KNeighborsClassifier' not in stacking_models_str:
+                    stacking_models.append(('KNeighborsClassifier', neighbors.KNeighborsClassifier()))
+                if 'DecisionTreeClassifier' not in stacking_models_str:
+                    stacking_models.append(('DecisionTreeClassifier', tree.DecisionTreeClassifier()))
+                if 'LogisticRegression' not in stacking_models_str:
+                    stacking_models.append(('LogisticRegression', linear_model.LogisticRegression()))
+                if 'GaussianNB' not in stacking_models_str:
+                    stacking_models.append(('GaussianNB', naive_bayes.GaussianNB()))
+                if 'SVC' not in stacking_models_str and len(self.x) < 5000:
+                    stacking_models.append(('SVC', svm.SVC()))
+                level_one = linear_model.LogisticRegression()
+                stack = ensemble.StackingClassifier(stacking_models, final_estimator=level_one)
+                cv = StratifiedKFold(n_splits=self.cvSplits, shuffle=self.shuffle)
+            else:
+                raise NotImplementedError('Unknown mode')
+            print('[AutoML] Stacked models: {}'.format([type(i[1]).__name__ for i in stacking_models]))
 
-        # Cross Validate
-        score = []
-        times = []
-        for (t, v) in tqdm(cv.split(x, y)):
-            start_time = time.time()
-            xt, xv, yt, yv = x[t], x[v], y[t].reshape((-1)), y[v].reshape((-1))
-            model = copy.deepcopy(stack)
-            model.fit(xt, yt)
-            score.append(self.scorer(model, xv, yv))
-            times.append(time.time() - start_time)
-        print('[AutoML] Stacking result:')
-        print('[AutoML] {}:        {:.2f} \u00B1 {:.2f}'.format(self.objective, np.mean(score), np.std(score)))
-        self.results.append(pd.DataFrame({
-            'date': datetime.today().strftime('%d %b %y'),
-            'model': type(stack).__name__,
-            'dataset': feature_set,
-            'params': dict([(stacking_models_str[ind] + '__' + key, stacking_models_params[ind][key]) for ind in
-                            range(len(stacking_models_str)) for key in stacking_models_params[ind].keys()]),
-            'mean_objective': np.mean(score),
-            'std_objective': np.std(score),
-            'mean_time': np.mean(times),
-            'std_time': np.std(times),
-            'version': self.version,
-            'type': 'Stacking',
-        }))
-        self.results.to_csv(self.mainDir + 'Results.csv', index=False)
-        if self.validateResults:
-            self.validate(stack, feature_set)
+            # Train stack
+            x, y = copy.deepcopy(self.x[self.colKeep[feature_set]]), copy.deepcopy(self.y)
+            if self.normalize:
+                normalize_features = [k for k in x.keys() if k not in self.dateCols + self.catCols]
+                scaler = pickle.load(open(self.mainDir + 'Features/Scaler_{}_{}.pickle'.format(feature_set, self.version),
+                                          'rb'))
+                x[normalize_features] = scaler.fit_transform(x[normalize_features])
+                if self.mode == 'regression':
+                    output_scaler = pickle.load(open(self.mainDir + 'Features/OutputScaler_{}_{}.pickle'.format(
+                        feature_set, self.version), 'rb'))
+                    y = pd.Series(output_scaler.fit_transform(y.values.reshape(-1, 1)).reshape(-1),
+                                  name=self.target)
+            # Sequence if necessary
+            if self.sequence:
+                sequencer = Sequence(back=self.sequenceBack, forward=self.sequenceForward,
+                                     shift=self.sequenceShift, diff=self.sequenceDiff)
+                x, y = sequencer.convert(x, y)
+            if isinstance(x, pd.DataFrame):
+                x, y = x.to_numpy(), y.to_numpy()
 
-    def validate(self, model, feature_set, params=None):
-        # todo adopt to Documentation
+            # Cross Validate
+            score = []
+            times = []
+            for (t, v) in tqdm(cv.split(x, y)):
+                start_time = time.time()
+                xt, xv, yt, yv = x[t], x[v], y[t].reshape((-1)), y[v].reshape((-1))
+                model = copy.deepcopy(stack)
+                model.fit(xt, yt)
+                score.append(self.scorer(model, xv, yv))
+                times.append(time.time() - start_time)
+            print('[AutoML] Stacking result:')
+            print('[AutoML] {}:        {:.2f} \u00B1 {:.2f}'.format(self.objective, np.mean(score), np.std(score)))
+            self.results.append(pd.DataFrame({
+                'date': datetime.today().strftime('%d %b %y'),
+                'model': type(stack).__name__,
+                'dataset': feature_set,
+                'params': dict([(stacking_models_str[ind] + '__' + key, stacking_models_params[ind][key]) for ind in
+                                range(len(stacking_models_str)) for key in stacking_models_params[ind].keys()]),
+                'mean_objective': np.mean(score),
+                'std_objective': np.std(score),
+                'mean_time': np.mean(times),
+                'std_time': np.std(times),
+                'version': self.version,
+                'type': 'Stacking',
+            }))
+            self.results.to_csv(self.mainDir + 'Results.csv', index=False)
+            if self.documentResults:
+                self.document(stack, feature_set)
+
+    def document(self, model, feature_set):
         """
-        Just a wrapper for the outside.
-        Parameters:
-        Model: The model to optimize, either string or class
-        Feature Set: String
-        (optional) params: Model parameters for which to validate
+        Loads the model and features and initiates the outside Documenting class.
         """
         assert feature_set in self.colKeep.keys(), 'Feature Set not available.'
+        if len(model.get_params()) == 0:
+            warnings.warn('[Documenting] Supplied model has no parameters!')
 
         # Get model
         if isinstance(model, str):
             models = Modelling(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
             model = models[[i for i in range(len(models)) if type(models[i]).__name__ == model][0]]
 
-        # Get params
-        if params is not None:
-            params = self._get_best_params(model, feature_set)
-
         # Run validation
-        self._validate_result(model, params, feature_set)
-
-    def _validate_result(self, master_model, params, feature_set):
-        # todo move to outside Documentation
-        print('[AutoML] Validating results for {} ({} {} features) (params: {})'.format(
-            type(master_model).__name__, len(self.colKeep[feature_set]), feature_set, params))
-
-        # Initiate
-        x, y = copy.deepcopy(self.x[self.colKeep[feature_set]]), copy.deepcopy(self.y)
-        model = None
-        output_scaler = None
-        y_not_normalized = None
-
-        # Normalize Feature Set (the X remains original)
-        if self.normalize:
-            normalize_features = [k for k in self.colKeep[feature_set] if k not in self.dateCols + self.catCols]
-            scaler = pickle.load(
-                open(self.mainDir + 'Features/Scaler_{}_{}.pickle'.format(feature_set, self.version), 'rb'))
-            x[normalize_features] = scaler.transform(x[normalize_features])
-            if self.mode == 'regression':
-                output_scaler = pickle.load(
-                    open(self.mainDir + 'Features/OutputScaler_{}_{}.pickle'.format(feature_set, self.version), 'rb'))
-                y_not_normalized = y.values.reshape(-1, 1)
-                y = pd.Series(output_scaler.transform(y.values.reshape(-1, 1)).reshape(-1), name=self.target)
-        x, y = x.to_numpy(), y.to_numpy().reshape(-1, 1)
-
-        # For Regression
-        if self.mode == 'regression':
-
-            # Cross-Validation Plots
-            fig, ax = plt.subplots(math.ceil(self.cvSplits / 2), 2, sharex='all', sharey='all')
-            fig.suptitle('{}-Fold Cross Validated Predictions - {}'.format(self.cvSplits, type(master_model).__name__))
-
-            # Initialize iterables
-            score = []
-            cv = KFold(n_splits=self.cvSplits, shuffle=self.shuffle)
-            # Cross Validate
-            i = 0
-            for i, (t, v) in enumerate(cv.split(x, y)):
-                xt, xv, yt, yv = x[t], x[v], y[t].reshape((-1)), y[v].reshape((-1))
-                model = copy.deepcopy(master_model)
-                model.set_params(**params)
-                model.fit(xt, yt)
-
-                # Metrics
-                score.append(self.scorer(model, xv, yv))
-
-                # Plot
-                ax[i // 2][i % 2].set_title('Fold-{}'.format(i))
-                if self.normalize:
-                    ax[i // 2][i % 2].plot(y_not_normalized[v], color='#2369ec')
-                    ax[i // 2][i % 2].plot(output_scaler.inverse_transform(model.predict(xv)),
-                                           color='#ffa62b', alpha=0.4)
-                else:
-                    ax[i // 2][i % 2].plot(yv, color='#2369ec')
-                    ax[i // 2][i % 2].plot(model.predict(xv), color='#ffa62b', alpha=0.4)
-
-            # Print & Finish plot
-            print('[AutoML] {}:        {:.2f} \u00B1 {:.2f}'.format(self.objective, np.mean(score), np.std(score)))
-            ax[i // 2][i % 2].legend(['Output', 'Prediction'])
-            plt.show()
-
-        # For BINARY classification
-        elif self.mode == 'classification' and self.y.nunique() == 2:
-            # Initiating
-            fig, ax = plt.subplots(math.ceil(self.cvSplits / 2), 2, sharex='all', sharey='all')
-            fig.suptitle('{}-Fold Cross Validated Predictions - {} ({})'.format(
-                self.cvSplits, type(master_model).__name__, feature_set))
-            fig2, ax2 = plt.subplots(figsize=[12, 8])
-            accuracy = []
-            precision = []
-            sensitivity = []
-            specificity = []
-            f1_score = []
-            area_under_curves = []
-            true_positive_rates = []
-            cm = np.zeros((2, 2))
-            mean_fpr = np.linspace(0, 1, 100)
-
-            # Modelling
-            cv = StratifiedKFold(n_splits=self.cvSplits)
-            for i, (t, v) in enumerate(cv.split(x, y)):
-                n = len(v)
-                xt, xv, yt, yv = x[t], x[v], y[t].reshape((-1)), y[v].reshape((-1))
-                model = copy.copy(master_model)
-                model.set_params(**params)
-                model.fit(xt, yt)
-                predictions = model.predict(xv).reshape((-1))
-
-                # Metrics
-                tp = np.logical_and(np.sign(predictions) == 1, yv == 1).sum()
-                tn = np.logical_and(np.sign(predictions) == 0, yv == 0).sum()
-                fp = np.logical_and(np.sign(predictions) == 1, yv == 0).sum()
-                fn = np.logical_and(np.sign(predictions) == 0, yv == 1).sum()
-                accuracy.append((tp + tn) / n * 100)
-                if tp + fp > 0:
-                    precision.append(tp / (tp + fp) * 100)
-                if tp + fn > 0:
-                    sensitivity.append(tp / (tp + fn) * 100)
-                if tn + fp > 0:
-                    specificity.append(tn / (tn + fp) * 100)
-                if tp + fp > 0 and tp + fn > 0:
-                    f1_score.append(2 * precision[-1] * sensitivity[-1] / (precision[-1] + sensitivity[-1]) if
-                                    precision[-1] + sensitivity[-1] > 0 else 0)
-                cm += np.array([[tp, fp], [fn, tn]]) / self.cvSplits
-
-                # ROC calculations
-                viz = metrics.plot_roc_curve(model, xv, yv, name='ROC fold {}'.format(i + 1), alpha=0.3, ax=ax2)
-                interp_tpr = np.interp(mean_fpr, viz.fpr, viz.tpr)
-                interp_tpr[0] = 0.0
-                true_positive_rates.append(interp_tpr)
-                area_under_curves.append(viz.roc_auc)
-
-                # Plot
-                ax[i // 2][i % 2].plot(yv, c='#2369ec', alpha=0.6)
-                ax[i // 2][i % 2].plot(predictions, c='#ffa62b')
-                ax[i // 2][i % 2].set_title('Fold-{}'.format(i))
-
-            # Results
-            print('[AutoML] Accuracy:        {:.2f} \u00B1 {:.2f} %%'.format(np.mean(accuracy), np.std(accuracy)))
-            print('[AutoML] Precision:       {:.2f} \u00B1 {:.2f} %%'.format(np.mean(precision), np.std(precision)))
-            print('[AutoML] Recall:          {:.2f} \u00B1 {:.2f} %%'.format(np.mean(sensitivity), np.std(sensitivity)))
-            print('[AutoML] Specificity:     {:.2f} \u00B1 {:.2f} %%'.format(np.mean(specificity), np.std(specificity)))
-            print('[AutoML] F1-score:        {:.2f} \u00B1 {:.2f} %%'.format(np.mean(f1_score), np.std(f1_score)))
-            print('[AutoML] Confusion Matrix:')
-            print('[AutoML] Prediction / true |  Faulty   |   Healthy      ')
-            print('[AutoML]  Faulty           |  {}|  {:.1f}'.format(('{:.1f}'.format(cm[0, 0])).ljust(9), cm[0, 1]))
-            print('[AutoML]  Healthy          |  {}|  {:.1f}'.format(('{:.1f}'.format(cm[1, 0])).ljust(9), cm[1, 1]))
-
-            # Check whether plot is possible
-            if isinstance(model, sklearn.linear_model.Lasso) or isinstance(model, sklearn.linear_model.Ridge):
-                return
-
-            # Adjust plots
-            ax2.plot([0, 1], [0, 1], linestyle='--', lw=2, color='#ffa62b',
-                     label='Chance', alpha=.8)
-            mean_tpr = np.mean(true_positive_rates, axis=0)
-            mean_tpr[-1] = 1.0
-            mean_auc = metrics.auc(mean_fpr, mean_tpr)
-            std_auc = np.std(area_under_curves)
-            ax2.plot(mean_fpr, mean_tpr, color='#2369ec',
-                     label=r'Mean ROC (AUC = {:.2f} $\pm$ {:.2f})'.format(mean_auc, std_auc),
-                     lw=2, alpha=.8)
-            std_tpr = np.std(true_positive_rates, axis=0)
-            true_pos_rates_upper = np.minimum(mean_tpr + std_tpr, 1)
-            true_pos_rates_lower = np.maximum(mean_tpr - std_tpr, 0)
-            ax2.fill_between(mean_fpr, true_pos_rates_lower, true_pos_rates_upper, color='#729ce9', alpha=.2,
-                             label=r'$\pm$ 1 std. dev.')
-            ax2.set(xlim=[-0.05, 1.05], ylim=[-0.05, 1.05],
-                    title="ROC Curve - {}".format(type(master_model).__name__))
-            ax2.legend(loc="lower right")
-            fig2.savefig(self.mainDir + 'EDA/ROC_{}.png'.format(type(model).__name__), format='png', dpi=200)
-
-        # For MULTICLASS classification
-        elif self.mode == 'classification':
-            # Initiating
-            fig, ax = plt.subplots(math.ceil(self.cvSplits / 2), 2, sharex='all', sharey='all')
-            fig.suptitle('{}-Fold Cross Validated Predictions - {} ({})'.format(
-                self.cvSplits, type(master_model).__name__, feature_set))
-            n_classes = self.y.nunique()
-            f1_score = np.zeros((self.cvSplits, n_classes))
-            log_loss = np.zeros(self.cvSplits)
-            avg_acc = np.zeros(self.cvSplits)
-
-            # Modelling
-            cv = StratifiedKFold(n_splits=self.cvSplits)
-            for i, (t, v) in enumerate(cv.split(x, y)):
-                xt, xv, yt, yv = x[t], x[v], y[t].reshape((-1)), y[v].reshape((-1))
-                model = copy.copy(master_model)
-                model.set_params(**params)
-                model.fit(xt, yt)
-                predictions = model.predict(xv).reshape((-1))
-
-                # Metrics
-                f1_score[i] = metrics.f1_score(yv, predictions, average=None)
-                avg_acc[i] = metrics.accuracy_score(yv, predictions)
-                if hasattr(model, 'predict_proba'):
-                    probabilities = model.predict_proba(xv)
-                    log_loss[i] = metrics.log_loss(yv, probabilities)
-
-                # Plot
-                ax[i // 2][i % 2].plot(yv, c='#2369ec', alpha=0.6)
-                ax[i // 2][i % 2].plot(predictions, c='#ffa62b')
-                ax[i // 2][i % 2].set_title('Fold-{}'.format(i))
-
-            # Results
-            print('F1 scores:')
-            print(''.join([' Class {} |'.format(i) for i in range(n_classes)]))
-            print(''.join([' {:.2f} '.ljust(9).format(f1) + '|' for f1 in np.mean(f1_score, axis=0)]))
-            print('Average Accuracy: {:.2f} \u00B1 {:.2f}'.format(np.mean(avg_acc), np.std(avg_acc)))
-            if hasattr(model, 'predict_proba'):
-                print('Log Loss:         {:.2f} \u00B1 {:.2f}'.format(np.mean(log_loss), np.std(log_loss)))
+        documenting = Documenting(self)
+        markdown = documenting.create(model, feature_set)
+        with open(self.mainDir + 'Documentation/v{}/{}.md'.format(self.version, type(model).__name__), 'w') as f:
+            f.write(markdown)
 
     def _prepare_production_files(self, model=None, feature_set=None, params=None):
         if not os.path.exists(self.mainDir + 'Production/v{}/'.format(self.version)):
@@ -908,19 +744,12 @@ class Pipeline:
             feature_set = results.iloc[1]['dataset']
             params = Utils.parse_json(results.iloc[1]['params'])
 
-
-        # Notify of results
-        print('[AutoML] Preparing Production Env Files for {}, feature set {}'.format(model, feature_set))
-        print('[AutoML] ', params)
-        print('[AutoML] {}: {:.2f} \u00B1 {:.2f}'.format(self.objective, results.iloc[0]['mean_objective'],
-                                                         results.iloc[0]['std_objective']))
-
         # Save Features
         self.bestFeatures = self.colKeep[feature_set]
         json.dump(self.bestFeatures, open(self.mainDir + 'Production/v{}/Features.json'.format(self.version), 'w'))
 
         # Copy data
-        x, y = copy.copy(self.x[self.bestFeatures]), copy.copy(self.y)
+        x, y = copy.deepcopy(self.x[self.bestFeatures]), copy.deepcopy(self.y)
 
         # Save Scaler & Normalize
         if self.normalize:
@@ -964,16 +793,22 @@ class Pipeline:
 
         # Pipeline
         pickle.dump(self, open(self.mainDir + 'Production/v{}/Pipeline.pickle'.format(self.version), 'wb'))
+
+        # Notify of results
+        print('[AutoML] Preparing Production Env Files for {}, feature set {}'.format(model, feature_set))
+        print('[AutoML] ', params)
+        print('[AutoML] Model fully fitted.')
+        print('[AutoML] In-sample {}: {:4f}'.format(self.objective, self.scorer(self.bestModel, x, y)))
         return
 
     def _error_analysis(self):
         # todo implement
         pass
 
-    def _convert_data(self, data):
+    def convert_data(self, data):
         # Load files
         folder = 'Production/v{}/'.format(self.version)
-        features = json.load(open(self.mainDir + folder + 'Features.json', 'r'))
+        features = self.bestFeatures
 
         # Clean data
         data = Utils.clean_keys(data)
@@ -1002,11 +837,13 @@ class Pipeline:
 
         # Normalize
         if self.normalize:
-            scaler = pickle.load(open(self.mainDir + folder + 'Scaler.pickle', 'rb'))
+            # scaler = pickle.load(open(self.mainDir + folder + 'Scaler.pickle', 'rb'))
+            scaler = self.bestScaler
             x[x.keys()] = scaler.transform(x)
             if self.mode == 'regression' and y is not None:
-                output_scaler = pickle.load(open(self.mainDir + folder + 'OutputScaler.pickle', 'rb'))
-                y = output_scaler.transform(y)
+                # output_scaler = pickle.load(open(self.mainDir + folder + 'OutputScaler.pickle', 'rb'))
+                # y = output_scaler.transform(y)
+                y = self.bestOutputScaler.transform(y)
 
         # Return
         return x, y
@@ -1016,26 +853,31 @@ class Pipeline:
         Full script to make predictions. Uses 'Production' folder with defined or latest version.
         @param data: data to do prediction on
         """
-        # todo save all inside one pickle
+        # todo save all inside one pickle --> self.bestX can be used, but needs to be loaded
         # Feature Extraction, Selection and Normalization
-        model = joblib.load(self.mainDir + 'Production/v{}/Model.joblib'.format(self.version))
+        # model = joblib.load(self.mainDir + 'Production/v{}/Model.joblib'.format(self.version))
         if self.verbose > 0:
-            print('[AutoML] Predicting with {}, v{}'.format(type(model).__name__, self.version))
-        x, y = self._convert_data(data)
+            # print('[AutoML] Predicting with {}, v{}'.format(type(model).__name__, self.version))
+            print('[AutoML] Predicting with {}, v{}'.format(type(self.bestModel).__name__, self.version))
+        x, y = self.convert_data(data)
 
         # Predict
         if self.mode == 'regression':
             if self.normalize:
-                output_scaler = pickle.load(open(self.mainDir + 'Production/v{}/OutputScaler.pickle'.format(
-                    self.version), 'rb'))
-                predictions = output_scaler.inverse_transform(model.predict(x))
+                # output_scaler = pickle.load(open(self.mainDir + 'Production/v{}/OutputScaler.pickle'.format(
+                #     self.version), 'rb'))
+                # predictions = output_scaler.inverse_transform(model.predict(x))
+                predictions = self.bestOutputScaler.invers_transform(self.bestModel.predict(x))
             else:
-                predictions = model.predict(x)
+                # predictions = model.predict(x)
+                predictions = self.bestModel.predict(x)
         elif self.mode == 'classification':
             try:
-                predictions = model.predict_proba(x)[:, 1]
+                predictions = self.bestModel.predict_proba(x)
+                # predictions = model.predict_proba(x)[:, 1]
             except AttributeError:
-                predictions = model.predict(x)
+                predictions = self.bestModel.predict(x)
+                # predictions = model.predict(x)
         else:
             raise ValueError('Unsupported mode')
 
@@ -1059,7 +901,7 @@ class Pipeline:
             print('[AutoML] Predicting with {}, v{}'.format(type(model).__name__, self.version))
 
         # Convert data
-        x, y = self._convert_data(data)
+        x, y = self.convert_data(data)
 
         # Predict
         return model.predict_proba(x)
