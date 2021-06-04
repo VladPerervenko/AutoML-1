@@ -64,7 +64,7 @@ stevedore==3.3.0
 threadpoolctl==2.1.0
 tqdm==4.61.0
 twine==3.4.1
-urllib3==1.26.4
+urllib3==1.26.5
 wcwidth==0.2.5
 webencodings==0.5.1
 xgboost==1.4.2
