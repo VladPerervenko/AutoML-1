@@ -38,10 +38,78 @@ class DataExploring:
                  folder='',
                  version=None):
         """
-        Doing all the fun EDA in an automated manner :)
+        Automated Exploratory Data Analysis. Covers binary classification and regression.
+        It generates:
+        - Missing Values Plot
+        - Line Plots of all features
+        - Box plots of all features
+        - Co-linearity Plot
+        - SHAP Values
+        - Random Forest Feature Importance
+        - Predictive Power Score
+
+        Additionally fFor Regression:
+        - Seasonality Plots
+        - Differentiated Variance Plot
+        - Auto Correlation Function Plot
+        - Partial Auto Correlation Function Plot
+        - Cross Correlation Function Plot
+        - Scatter Plots
+
+        All figures are organized per project, category and version with the following file structure:
+        |-- 'Folder parameter'
+        |   |-- EDA
+        |   |   |-- Timeplots
+        |   |   |   |-- v'i'
+        |   |   |   |   |-- Feature_0.png
+        |   |   |   |   |-- Feature_1.png
+        ...
+
+        Parameters
+        ----------
+        data pd.DataFrame: Input data, either Numpy or Pandas
+        y pd.Series: Output / Target, either Numpy or Pandas
+        mode str: classification or regression
+        plot_time_plots bool: Boolean to create time plots or not
+        plot_box_plots bool: Boolean to create box plots
+        plot_missing_values bool: Boolean to create missing values plot
+        plot_seasonality bool: Boolean to create seasonality plots
+        plot_co_linearity bool: Boolean to create co-linearity plots
+        plot_differencing bool: Boolean to create differencing plots
+        plot_signal_correlations bool: Boolean to create signal correlation plots (ACF, PACF, CCF)
+        plot_feature_importance bool: Boolean to create feature importance plots (SHAP, RF, PPS)
+        plot_scatter_plots bool: Boolean to create scatter plots
+        differ int: Differencing order for signal correlation plots
+        pre_tag str: Optional, string to format file names
+        max_samples int: Optional, under-sampling for large datasets
+        season_periods int: Optional, season periods for seasonality plots
+        lags int: Optional, maximum lags to take into account for signal plots
+        skip_completed bool: Whether to create existing plots
+        folder str: Main folder to dump files in
+        version int: All graphs are put in a versioned folder
         """
+        assert isinstance(data, np.ndarray) or isinstance(data, pd.DataFrame), 'Data should be Numpy or Pandas'
+        if y is not None:
+            assert isinstance(y, np.ndarray) or isinstance(y, pd.Series), 'Y should be Numpy or Pandas'
         if type(data) != pd.DataFrame:
             data = pd.DataFrame(data=data, columns=['Feature_{}'.format(i) for i in range(data.shape[1])])
+        assert mode in ['classification', 'regression']
+        assert isinstance(plot_time_plots, bool)
+        assert isinstance(plot_box_plots, bool)
+        assert isinstance(plot_missing_values, bool)
+        assert isinstance(plot_co_linearity, bool)
+        assert isinstance(plot_differencing, bool)
+        assert isinstance(plot_signal_correlations, bool)
+        assert isinstance(plot_feature_importance, bool)
+        assert isinstance(plot_scatter_plots, bool)
+        assert isinstance(differ, int)
+        assert isinstance(pre_tag, str)
+        assert isinstance(max_samples, int)
+        assert isinstance(season_periods, int)
+        assert isinstance(lags, int)
+        assert isinstance(skip_completed, bool)
+        assert isinstance(folder, str)
+        assert isinstance(version, int)
 
         # Running booleans
         self.plotTimePlots = plot_time_plots
@@ -85,18 +153,16 @@ class DataExploring:
 
     def run(self):
         # Run all functions
-        if self.mode == 'classification':
-            self._run_classification()
-        else:
-            self._run_regression()
-
-    def _run_classification(self):
         print('[EDA] Generating Missing Values Plot')
         self.missing_values()
         print('[EDA] Generating Time plots')
         self.time_plots()
         print('[EDA] Generating Box plots')
         self.box_plots()
+        print('[EDA] Generating Co-linearity Plots')
+        self.co_linearity()
+
+        # Functions which require output
         if self.Y is not None:
             print('[EDA] Generating SHAP plot')
             self.shap()
@@ -105,16 +171,19 @@ class DataExploring:
             print('[EDA] Predictive Power Score Plot')
             self.predictive_power_score()
 
+        # Mode specific functions
+        if self.mode == 'classification':
+            self._run_classification()
+        else:
+            self._run_regression()
+
+    def _run_classification(self):
+        pass
+
     def _run_regression(self):
-        print('[EDA] Generating Missing Values Plot')
-        self.missing_values()
-        print('[EDA] Generating Time plots')
-        self.time_plots()
-        print('[EDA] Generating Box plots')
-        self.box_plots()
-        self.seasonality()
-        print('[EDA] Generating Co-linearity Plots')
-        self.co_linearity()
+        if self.plotSeasonality:
+            print('[EDA] Generating Seasonality Plots')
+            self.seasonality()
         print('[EDA] Generating Diff Var Plot')
         self.differencing()
         print('[EDA] Generating ACF Plots')
@@ -126,12 +195,6 @@ class DataExploring:
             self.cross_corr()
             print('[EDA] Generating Scatter plots')
             self.scatters()
-            print('[EDA] Generating SHAP plot')
-            self.shap()
-            print('[EDA] Generating Feature Ranking Plot')
-            self.feature_ranking()
-            print('[EDA] Predictive Power Score Plot')
-            self.predictive_power_score()
 
     def missing_values(self):
         if self.plotMissingValues:
@@ -218,24 +281,23 @@ class DataExploring:
                 plt.close(fig)
 
     def seasonality(self):
-        if self.plotSeasonality:
-            # Create folder
-            if not os.path.exists(self.folder + 'Seasonality/'):
-                os.mkdir(self.folder + 'Seasonality/')
+        # Create folder
+        if not os.path.exists(self.folder + 'Seasonality/'):
+            os.mkdir(self.folder + 'Seasonality/')
 
-            # Iterate through features
-            for key in tqdm(self.data.keys()):
-                for period in self.seasonPeriods:
-                    if self.tag + key + '_v{}.png'.format(self.version) in os.listdir(self.folder + 'Seasonality/'):
-                        continue
-                    seasonality = STL(self.data[key], period=period).fit()
-                    fig = plt.figure(figsize=[24, 16])
-                    plt.plot(range(len(self.data)), self.data[key])
-                    plt.plot(range(len(self.data)), seasonality)
-                    plt.title(key + ', period=' + str(period))
-                    fig.savefig(self.folder + 'Seasonality/' + self.tag + str(period)+'/'+key +
-                                '_v{}.png'.format(self.version), format='png', dpi=300)
-                    plt.close()
+        # Iterate through features
+        for key in tqdm(self.data.keys()):
+            for period in self.seasonPeriods:
+                if self.tag + key + '_v{}.png'.format(self.version) in os.listdir(self.folder + 'Seasonality/'):
+                    continue
+                seasonality = STL(self.data[key], period=period).fit()
+                fig = plt.figure(figsize=[24, 16])
+                plt.plot(range(len(self.data)), self.data[key])
+                plt.plot(range(len(self.data)), seasonality)
+                plt.title(key + ', period=' + str(period))
+                fig.savefig(self.folder + 'Seasonality/' + self.tag + str(period)+'/'+key +
+                            '_v{}.png'.format(self.version), format='png', dpi=300)
+                plt.close()
 
     def co_linearity(self):
         if self.plotCoLinearity:

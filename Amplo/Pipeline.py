@@ -318,6 +318,10 @@ class Pipeline:
 
         @param data: DataFrame including target
         """
+        # Tests
+        assert isinstance(data, pd.DataFrame), 'Data must be Pandas'
+        assert len(data) > 0, 'Dataframe has length zero'
+        assert self.target in data.keys(), 'Target missing in data'
         # Execute pipeline
         self._data_processing(data)
         self._eda()

@@ -20,6 +20,7 @@ from sklearn.cluster import MiniBatchKMeans
 
 
 class FeatureProcessing:
+    # todo improve thresholds of RFT / RFI
 
     def __init__(self,
                  max_lags=10,
@@ -27,9 +28,53 @@ class FeatureProcessing:
                  information_threshold=0.99,
                  extract_features=True,
                  folder='',
-                 mode=None,
+                 mode='classification',
                  timeout=900,
                  version=''):
+        """
+        Automatically extracts and selects features. Removes Co-Linear Features.
+        Included Feature Extraction algorithms:
+        - Multiplicative Features
+        - Dividing Features
+        - Additive Features
+        - Subtractive Features
+        - Trigonometric Features
+        - K-Means Features
+        - Lagged Features
+        - Differencing Features
+
+        Included Feature Selection algorithms:
+        - Random Forest Feature Importance (Threshold and Increment)
+        - Predictive Power Score
+        - Boruta
+
+        Parameters
+        ----------
+        max_lags int: Maximum lags for lagged features to analyse
+        max_diff int: Maximum differencing order for differencing features
+        information_threshold float: Information threshold for co-linear features
+        extract_features bool: Whether or not to extract features
+        folder str: Parent folder for results
+        mode str: classification / regression
+        timeout int: Feature Extraction can be exhausting for many features, this limits the scope
+        version int: To version all stored files
+        """
+        # Tests
+        assert isinstance(max_lags, int)
+        assert isinstance(max_diff, int)
+        assert isinstance(information_threshold, float)
+        assert isinstance(extract_features, bool)
+        assert isinstance(folder, str)
+        assert isinstance(mode, str)
+        assert isinstance(timeout, int)
+        assert isinstance(version, int)
+        assert 0 <= max_lags < 50, 'Max lags needs to be within [0, 50]'
+        assert 0 <= max_diff < 3, 'Max diff needs to be within [0, 3]'
+        assert 0 < information_threshold < 1, 'Information threshold needs to be within [0, 1]'
+        assert mode.lower() in ['classification', 'regression'], \
+            'Mode needs to be specified (regression or classification)'
+
+        # Parameters
         self.x = None
         self.originalInput = None
         self.y = None
@@ -55,11 +100,6 @@ class FeatureProcessing:
         if not os.path.exists(self.folder):
             os.makedirs(self.folder)
 
-        # Tests
-        assert 0 <= max_lags < 50, 'Max lags needs to be within [0, 50]'
-        assert 0 <= max_diff < 3, 'Max diff needs to be within [0, 3]'
-        assert 0 < information_threshold < 1, 'Information threshold needs to be within [0, 1]'
-        assert mode is not None, 'Mode needs to be specified (regression or classification)'
 
     def extract(self, input_frame, output_frame):
         self._clean_set(input_frame, output_frame)

@@ -23,19 +23,40 @@ class DataProcessing:
                  mode='regression',
                  ):
         """
-        Preprocessing Class. Deals with Outliers, Missing Values, duplicate rows, data types (floats, categorical and
+        Preprocessing Class. Cleans a dataset into a workable format.
+        Deals with Outliers, Missing Values, duplicate rows, data types (floats, categorical and
         dates), Not a Numbers, Infinities.
 
-        :param target: Column name of target variable
-        :param num_cols: Numerical columns, all parsed to integers and floats
-        :param date_cols: Date columns, all parsed to pd.datetime format
-        :param cat_cols: Categorical Columns. Currently all one-hot encoded.
-        :param missing_values: How to deal with missing values ('remove', 'interpolate' or 'mean')
-        :param outlier_removal: How to deal with outliers ('boxplot', 'z-score' or 'none')
-        :param z_score_threshold: If outlierRemoval='z-score', the threshold is adaptable, default=4.
-        :param folder: Directory for storing the output files
-        :param version: Versioning the output files
+        Parameters
+        ----------
+        target str: Column name of target variable
+        num_cols list: Numerical columns, all parsed to integers and floats
+        date_cols list: Date columns, all parsed to pd.datetime format
+        cat_cols list: Categorical Columns. Currently all one-hot encoded.
+        missing_values str: How to deal with missing values ('remove', 'interpolate' or 'mean')
+        outlier_removal str: How to deal with outliers ('clip', 'boxplot', 'z-score' or 'none')
+        z_score_threshold int: If outlierRemoval='z-score', the threshold is adaptable, default=4.
+        folder str: Directory for storing the output files
+        version int: Versioning the output files
+        mode str: classification / regression
         """
+        # Tests
+        assert isinstance(target, str)
+        assert isinstance(num_cols, list) or num_cols is None
+        assert isinstance(date_cols, list) or date_cols is None
+        assert isinstance(cat_cols, list) or cat_cols is None
+        assert isinstance(missing_values, str)
+        mis_values_algo = ['remove_rows', 'remove_cols', 'interpolate', 'mean', 'zero']
+        assert missing_values in mis_values_algo, \
+            'Missing values algorithm not implemented, pick from {}'.format(', '.join(mis_values_algo))
+        out_rem_algo = ['boxplot', 'z-score', 'clip', 'none']
+        assert outlier_removal in out_rem_algo, \
+            'Outlier Removal algorithm not implemented, pick from {}'.format(', '.join(out_rem_algo))
+        assert isinstance(z_score_threshold, int)
+        assert isinstance(folder, str)
+        assert isinstance(version, int)
+        assert mode in ['classification', 'regression'], 'Mode needs to be classification or regression'
+
         # Parameters
         self.folder = folder if len(folder) == 0 or folder[-1] == '/' else folder + '/'
         if not os.path.exists(self.folder):
@@ -54,14 +75,6 @@ class DataProcessing:
         self.oScaler = None
 
         # Algorithms
-        missing_values_implemented = ['remove_rows', 'remove_cols', 'interpolate', 'mean', 'zero']
-        outlier_removal_implemented = ['boxplot', 'z-score', 'clip', 'none']
-        if outlier_removal not in outlier_removal_implemented:
-            raise ValueError(
-                "Outlier Removal Algorithm not implemented. Should be in " + str(outlier_removal_implemented))
-        if missing_values not in missing_values_implemented:
-            raise ValueError("Missing Values Algorithm not implemented. Should be in " +
-                             str(missing_values_implemented))
         self.missingValues = missing_values
         self.outlierRemoval = outlier_removal
         self.zScoreThreshold = z_score_threshold
@@ -91,6 +104,7 @@ class DataProcessing:
 
         # Convert data types
         data = self.convert_data_types(data)
+
         # Remove outliers
         data = self.remove_outliers(data)
         # Note

@@ -30,19 +30,46 @@ class Modelling:
                  store_models=False,
                  store_results=True):
         """
-        Class that analyses the performance of various regressors or classifiers.
-        @param [str] mode: 'regression' or 'classification'
-        @param [bool] shuffle: Whether to shuffle samples for training / validation
-        @param [str] objective: Performance metric
-        @param [str] folder: Folder to store models and / or results
-        @param [int] n_splits: Number of cross-validation splits
-        @param [str] dataset: Name of feature set to use
-        @param [bool] store_models: Whether to store the trained models
-        @param [bool] store_results: Whether to store the results
+        Runs various regression or classification models.
+        Includes:
+        - Scikit's Linear Model
+        - Scikit's Random Forest
+        - Scikit's Bagging
+        - Scikit's GradientBoosting
+        - Scikit's HistGradientBoosting
+        - DMLC's XGBoost
+        - Catboost's Catboost
+        - Microsoft's LightGBM
+
+        Parameters
+        ----------
+        mode str: 'regression' or 'classification'
+        shuffle bool: Whether to shuffle samples for training / validation
+        n_splits int: Number of cross-validation splits
+        objective str: Performance metric from SciKit Scorers*
+        samples int: Samples in dataset, does not need to be specified but useful for calling return_models()
+        folder str: Folder to store models and / or results
+        dataset str: Name of feature set, documentation purpose
+        store_models bool: Whether to store the trained models
+        store_results bool:Whether to store the results
+
+        * https://scikit-learn.org/stable/modules/model_evaluation.html
         """
-        # Args
-        assert objective in metrics.SCORERS.keys(), '\nPick scorer from sklearn.metrics.SCORERS: \n{}' \
-            .format(list(metrics.SCORERS.keys()))
+        # Test
+        assert mode in ['classification', 'regression'], 'Unsupported mode'
+        assert isinstance(shuffle, bool)
+        assert isinstance(n_splits, int)
+        assert 2 < n_splits < 10, 'Reconsider your number of splits'
+        assert isinstance(objective, str)
+        assert objective in metrics.SCORERS.keys(), \
+            'Pick scorer from sklearn.metrics.SCORERS: \n{}'.format(list(metrics.SCORERS.keys()))
+        assert isinstance(samples, int) or samples is None
+        assert isinstance(folder, str)
+        assert isinstance(dataset, str)
+        assert isinstance(store_models, bool)
+        assert isinstance(store_results, bool)
+
+        # Parameters
         self.objective = objective
         self.scoring = metrics.SCORERS[objective]
         self.mode = mode
