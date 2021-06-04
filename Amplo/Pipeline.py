@@ -703,6 +703,11 @@ class Pipeline:
         Loads the model and features and initiates the outside Documenting class.
         """
         assert feature_set in self.colKeep.keys(), 'Feature Set not available.'
+        if os.path.exists(self.mainDir + 'Documentation/v{}/{}_{}.md'.format(self.version, type(model).__name__,
+                                                                             feature_set)):
+            print('[AutoML] Documentation existing for {} v{} - {} '.format(type(model).__name__, self.version,
+                                                                           feature_set))
+            return
         if len(model.get_params()) == 0:
             warnings.warn('[Documenting] Supplied model has no parameters!')
 
@@ -714,7 +719,8 @@ class Pipeline:
         # Run validation
         documenting = Documenting(self)
         markdown = documenting.create(model, feature_set)
-        with open(self.mainDir + 'Documentation/v{}/{}.md'.format(self.version, type(model).__name__), 'w') as f:
+        with open(self.mainDir + 'Documentation/v{}/{}_{}.md'.format(self.version, type(model).__name__, feature_set),
+                  'w') as f:
             f.write(markdown)
 
     def _prepare_production_files(self, model=None, feature_set=None, params=None):

@@ -501,7 +501,7 @@ The current validation strategy used {}, with {} splits and {} shuffling the dat
                 table += "\n| " + ' | '.join([str(v) if not isinstance(v, float) else str(round(v, 4))
                                               for v in list(params.values())[i * 10: (i + 1) * 10]]) + ' |\n\n'
         else:
-            table = '| ' + ' | '.join([k for k in params.keys()]) + ' |\n'
+            table = '| ' + ' | '.join([k for k in params.keys()]) + ' |'
             table += '\n|' + ' --- |' * 10
             table += "\n| " + ' | '.join([str(v) if not isinstance(v, float) else str(round(v, 4))
                                           for v in params.values()]) + ' |\n\n'
