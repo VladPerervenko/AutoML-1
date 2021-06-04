@@ -154,7 +154,6 @@ class OptunaGridSearch:
             return param
         elif type(self.model).__name__ == 'LGBMRegressor':
             return {
-                'num_iterations': trial.suggest_int('num_iterations', 100, 500),
                 'num_leaves': trial.suggest_int('num_leaves', 10, 150),
                 'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, min(1000, int(self.samples / 10))),
                 'min_sum_hessian_in_leaf': trial.suggest_uniform('min_sum_hessian_in_leaf', 1e-3, 0.5),
@@ -176,10 +175,11 @@ class OptunaGridSearch:
                 'n_estimators': trial.suggest_int('n_estimators', 500, 2000),
                 "verbose": 0,
                 'early_stopping_rounds': 100,
+                'od_pval': 1e-5,
                 'loss_function': 'Logloss' if self.binary else 'MultiClass',
                 'learning_rate': trial.suggest_loguniform('learning_rate', 0.001, 0.5),
                 'l2_leaf_reg': trial.suggest_uniform('l2_leaf_reg', 0, 10),
-                'depth': trial.suggest_int('depth', 1,  min(10, int(np.log2(self.samples)))),
+                'depth': trial.suggest_int('depth', 1, min(10, int(np.log2(self.samples)))),
                 'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, min(1000, int(self.samples / 10))),
                 'grow_policy': trial.suggest_categorical('grow_policy', ['SymmetricTree', 'Depthwise', 'Lossguide']),
             }
@@ -237,11 +237,10 @@ class OptunaGridSearch:
             return param
         elif type(self.model).__name__ == 'LGBMClassifier':
             return {
-                'num_iterations': trial.suggest_int('num_iterations', 100, 500),
                 "objective": "binary" if self.binary else 'multiclass',
                 "metric": trial.suggest_categorical("metric", ['binary_error', 'auc', 'average_precision',
                                                                'binary_logloss']) if self.binary else
-                    trial.suggest_categorical('metric', ['multi_error', 'multi_logloss', 'auc_mu']),
+                trial.suggest_categorical('metric', ['multi_error', 'multi_logloss', 'auc_mu']),
                 "verbosity": -1,
                 "boosting_type": "gbdt",
                 "lambda_l1": trial.suggest_loguniform("lambda_l1", 1e-8, 10.0),
