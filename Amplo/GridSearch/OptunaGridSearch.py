@@ -10,9 +10,24 @@ from sklearn.metrics import SCORERS
 
 
 class OptunaGridSearch:
+    # todo remove params
 
     def __init__(self, model, params=None, cv=KFold(n_splits=3), scoring='accuracy', verbose=0, timeout=3600,
                  candidates=250):
+        """
+        Wrapper for Optuna Grid Search. Takes any model support by Amplo.AutoML.Modelling.
+        The parameter search space is predefined for each model.
+
+        Parameters
+        ----------
+        model obj: Model object to optimize
+        params : deprecated
+        cv obj: Scikit CV object
+        scoring str: From Scikits Scorers*
+        verbose int: How much to print
+        timeout int: Time limit of optimization
+        candidates int: Candidate limits to evaluate
+        """
         self.model = model
         if hasattr(model, 'is_fitted'):
             assert not model.is_fitted(), 'Model already fitted'
@@ -97,7 +112,7 @@ class OptunaGridSearch:
             return {
                 'loss': trial.suggest_categorical('loss', ['least_squares', 'least_absolute_deviation']),
                 'learning_rate': trial.suggest_loguniform('learning_rate', 0.001, 0.5),
-                'max_iter': trial.suggest_int('max_iter', 100, 1000),
+                'max_iter': trial.suggest_int('max_iter', 100, 250),
                 'max_leaf_nodes': trial.suggest_int('max_leaf_nodes', 30, 150),
                 'max_depth': trial.suggest_int('max_depth', 3, min(10, int(np.log2(self.samples)))),
                 'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, min(1000, int(self.samples / 10))),
@@ -173,7 +188,7 @@ class OptunaGridSearch:
                 'loss': trial.suggest_categorical('loss', ['deviance', 'exponential']),
                 'learning_rate': trial.suggest_loguniform('learning_rate', 0.001, 0.5),
                 'max_depth': trial.suggest_int('max_depth', 3, min(15, int(np.log2(self.samples)))),
-                'n_estimators': trial.suggest_int('n_estimators', 100, 1000),
+                'n_estimators': trial.suggest_int('n_estimators', 100, 250),
                 'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, min(1000, int(self.samples / 10))),
                 'max_features': trial.suggest_uniform('max_features', 0.5, 1),
                 'subsample': trial.suggest_uniform('subsample', 0.5, 1),
@@ -224,7 +239,9 @@ class OptunaGridSearch:
             return {
                 'num_iterations': trial.suggest_int('num_iterations', 100, 500),
                 "objective": "binary" if self.binary else 'multiclass',
-                "metric": trial.suggest_categorical("metric", ['rmse', 'auc', 'average_precision', 'binary_logloss']),
+                "metric": trial.suggest_categorical("metric", ['binary_error', 'auc', 'average_precision',
+                                                               'binary_logloss']) if self.binary else
+                    trial.suggest_categorical('metric', ['multi_error', 'multi_logloss', 'auc_mu']),
                 "verbosity": -1,
                 "boosting_type": "gbdt",
                 "lambda_l1": trial.suggest_loguniform("lambda_l1", 1e-8, 10.0),
