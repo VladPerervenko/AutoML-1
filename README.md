@@ -11,9 +11,9 @@ Though this is a standalone Python package, Amplo's AutoML is also available on 
 With a graphical user interface and various data connectors, it is the ideal place for service engineers to get started 
 on Predictive Maintenance development. 
 
-Amplo's AutoML Pipeline contains the entire Machine Learning development cycle, including exploratory data analysis, data cleaning, 
-feature extraction, feature selection, model selection, hyper parameter optimization, version control, production-
-ready models and documentation. 
+Amplo's AutoML Pipeline contains the entire Machine Learning development cycle, including exploratory data analysis, 
+data cleaning, feature extraction, feature selection, model selection, hyper parameter optimization, stacking, 
+version control, production-ready models and documentation. 
 
 # Downloading Amplo
 The easiest way is to install our Python package through [PyPi](https://pypi.org/project/amplo/):
