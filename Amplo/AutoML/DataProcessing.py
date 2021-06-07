@@ -1,7 +1,7 @@
 import re
 import os
-import copy
 import inspect
+import textwrap
 import numpy as np
 import pandas as pd
 from ..Utils import clean_keys
@@ -64,20 +64,20 @@ class DataProcessing:
         self.version = version
         self.target = re.sub("[^a-z0-9]", '_', target.lower())
         self.mode = mode
-        self.numCols = [] if num_cols is None else [re.sub('[^a-z0-9]', '_', nc.lower()) for nc in num_cols]
-        self.catCols = [] if cat_cols is None else [re.sub('[^a-z0-9]', '_', cc.lower()) for cc in cat_cols]
-        self.dateCols = [] if date_cols is None else [re.sub('[^a-z0-9]', '_', dc.lower()) for dc in date_cols]
-        if self.target in self.numCols:
-            self.numCols.remove(self.target)
+        self.num_cols = [] if num_cols is None else [re.sub('[^a-z0-9]', '_', nc.lower()) for nc in num_cols]
+        self.cat_cols = [] if cat_cols is None else [re.sub('[^a-z0-9]', '_', cc.lower()) for cc in cat_cols]
+        self.date_cols = [] if date_cols is None else [re.sub('[^a-z0-9]', '_', dc.lower()) for dc in date_cols]
+        if self.target in self.num_cols:
+            self.num_cols.remove(self.target)
 
         # Variables
         self.scaler = None
         self.oScaler = None
 
         # Algorithms
-        self.missingValues = missing_values
-        self.outlierRemoval = outlier_removal
-        self.zScoreThreshold = z_score_threshold
+        self.missing_values = missing_values
+        self.outlier_removal = outlier_removal
+        self.z_score_threshold = z_score_threshold
 
         # Statistics for Documenting
         self.removedDuplicateRows = 0
@@ -128,11 +128,11 @@ class DataProcessing:
 
     def convert_data_types(self, data):
         # Convert Data Types
-        for key in self.dateCols:
+        for key in self.date_cols:
             data.loc[:, key] = pd.to_datetime(data[key], errors='coerce', infer_datetime_format=True, utc=True)
-        for key in [key for key in data.keys() if key not in self.dateCols and key not in self.catCols]:
+        for key in [key for key in data.keys() if key not in self.date_cols and key not in self.cat_cols]:
             data.loc[:, key] = pd.to_numeric(data[key], errors='coerce', downcast='float')
-        for key in self.catCols:
+        for key in self.cat_cols:
             if key in data.keys():
                 dummies = pd.get_dummies(data[key])
                 for dummy_key in dummies.keys():
@@ -156,35 +156,35 @@ class DataProcessing:
 
     def remove_outliers(self, data):
         # Remove Outliers
-        if self.outlierRemoval == 'boxplot':
+        if self.outlier_removal == 'boxplot':
             q1 = data.quantile(0.25)
             q3 = data.quantile(0.75)
             for key in q1.keys():
                 data.loc[data[key] < q1[key] - 1.5 * (q3[key] - q1[key]), key] = np.nan
                 data.loc[data[key] > q3[key] + 1.5 * (q3[key] - q1[key]), key] = np.nan
-        elif self.outlierRemoval == 'z-score':
+        elif self.outlier_removal == 'z-score':
             z_score = (data - data.mean(skipna=True, numeric_only=True)) \
                      / data.std(skipna=True, numeric_only=True)
-            data[z_score > self.zScoreThreshold] = np.nan
-        elif self.outlierRemoval == 'clip':
+            data[z_score > self.z_score_threshold] = np.nan
+        elif self.outlier_removal == 'clip':
             data = data.clip(lower=-1e12, upper=1e12)
         return data
 
     def remove_missing_values(self, data):
         # Remove Missing Values
         data = data.replace([np.inf, -np.inf], np.nan)
-        if self.missingValues == 'remove_rows':
+        if self.missing_values == 'remove_rows':
             data = data[data.isna().sum(axis=1) == 0]
-        elif self.missingValues == 'remove_cols':
+        elif self.missing_values == 'remove_cols':
             data = data.loc[:, data.isna().sum(axis=0) == 0]
-        elif self.missingValues == 'zero':
+        elif self.missing_values == 'zero':
             data = data.fillna(0)
-        elif self.missingValues == 'interpolate':
-            ik = np.setdiff1d(data.keys().to_list(), self.dateCols)
+        elif self.missing_values == 'interpolate':
+            ik = np.setdiff1d(data.keys().to_list(), self.date_cols)
             data[ik] = data[ik].interpolate(limit_direction='both')
             if data.isna().sum().sum() != 0:
                 data = data.fillna(0)
-        elif self.missingValues == 'mean':
+        elif self.missing_values == 'mean':
             data = data.fillna(data.mean())
         return data
 
@@ -193,9 +193,11 @@ class DataProcessing:
         data.to_csv(self.folder + 'Cleaned_v{}.csv'.format(self.version), index_label='index')
 
     def export_function(self):
+        duplicates_code = inspect.getsource(self.remove_duplicates)
+        duplicates_code = duplicates_code[duplicates_code.find('\n')+1:]
         function_strings = [
-            inspect.getsource(clean_keys),
-            inspect.getsource(self.remove_duplicates).replace('self.', ''),
+            textwrap.indent(inspect.getsource(clean_keys), '    '),
+            duplicates_code.replace('self.', ''),
             inspect.getsource(self.convert_data_types).replace('self.', ''),
             inspect.getsource(self.remove_outliers).replace('self.', ''),
             inspect.getsource(self.remove_missing_values).replace('self.', ''),
@@ -203,11 +205,11 @@ class DataProcessing:
         function_strings = '\n'.join([k[k.find('\n'): k.rfind('\n', 0, k.rfind('\n'))] for k in function_strings])
 
         return """
-            #################
-            # Data Cleaning #
-            #################
-            # Copy vars
-            catCols, dateCols, target = {}, {}, '{}'
-            outlierRemoval, missingValues, zScoreThreshold = '{}', '{}', '{}'
-    """.format(self.catCols, self.dateCols, self.target, self.outlierRemoval, self.missingValues,
-               self.zScoreThreshold) + function_strings
+        #################
+        # Data Cleaning #
+        #################
+        # Copy vars
+        cat_cols, date_cols, target = {}, {}, '{}'
+        outlier_removal, missing_values, z_score_threshold = '{}', '{}', '{}'
+    """.format(self.cat_cols, self.date_cols, self.target, self.outlier_removal, self.missing_values,
+               self.z_score_threshold) + function_strings

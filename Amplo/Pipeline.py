@@ -3,7 +3,6 @@ import os
 import time
 import copy
 import json
-import math
 import joblib
 import pickle
 import shutil
@@ -13,9 +12,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from datetime import datetime
-import matplotlib.pyplot as plt
 
-import sklearn
 from sklearn import metrics
 from sklearn.model_selection import KFold
 from sklearn.model_selection import StratifiedKFold
@@ -262,13 +259,14 @@ class Pipeline:
                     if self.verbose > 0:
                         print('[AutoML] Loading last version ({})'.format(changelog[:changelog.find('\n')]))
                     self.bestModel = joblib.load(self.mainDir + 'Production/v{}/Model.joblib'.format(self.version))
-                    self.bestFeatures = json.load(open(self.mainDir + 'Production/v{}/Features.json'.format(self.version), 'r'))
+                    self.bestFeatures = json.load(open(self.mainDir + 'Production/v{}/Features.json'.format(
+                        self.version), 'r'))
                     if self.normalize:
-                        self.bestScaler = pickle.load(open(self.mainDir + 'Production/v{}/Scaler.pickle'.format(self.version), 'rb'))
+                        self.bestScaler = pickle.load(open(
+                            self.mainDir + 'Production/v{}/Scaler.pickle'.format(self.version), 'rb'))
                         if self.mode == 'regression':
-                            self.bestOutputScaler = pickle.load(open(self.mainDir +
-                                                                     'Production/v{}/OutputScaler.pickle'.format(
-                                self.version), 'rb'))
+                            self.bestOutputScaler = pickle.load(open(
+                                self.mainDir + 'Production/v{}/OutputScaler.pickle'.format(self.version), 'rb'))
 
     def _create_dirs(self):
         folders = ['', 'EDA', 'Data', 'Features', 'Documentation', 'Production']
@@ -653,8 +651,8 @@ class Pipeline:
             x, y = copy.deepcopy(self.x[self.colKeep[feature_set]]), copy.deepcopy(self.y)
             if self.normalize:
                 normalize_features = [k for k in x.keys() if k not in self.dateCols + self.catCols]
-                scaler = pickle.load(open(self.mainDir + 'Features/Scaler_{}_{}.pickle'.format(feature_set, self.version),
-                                          'rb'))
+                scaler = pickle.load(open(
+                    self.mainDir + 'Features/Scaler_{}_{}.pickle'.format(feature_set, self.version), 'rb'))
                 x[normalize_features] = scaler.fit_transform(x[normalize_features])
                 if self.mode == 'regression':
                     output_scaler = pickle.load(open(self.mainDir + 'Features/OutputScaler_{}_{}.pickle'.format(
@@ -703,10 +701,10 @@ class Pipeline:
         Loads the model and features and initiates the outside Documenting class.
         """
         assert feature_set in self.colKeep.keys(), 'Feature Set not available.'
-        if os.path.exists(self.mainDir + 'Documentation/v{}/{}_{}.md'.format(self.version, type(model).__name__,
-                                                                             feature_set)):
-            print('[AutoML] Documentation existing for {} v{} - {} '.format(type(model).__name__, self.version,
-                                                                           feature_set))
+        if os.path.exists(self.mainDir + 'Documentation/v{}/{}_{}.md'.format(
+                self.version, type(model).__name__, feature_set)):
+            print('[AutoML] Documentation existing for {} v{} - {} '.format(
+                type(model).__name__, self.version, feature_set))
             return
         if len(model.get_params()) == 0:
             warnings.warn('[Documenting] Supplied model has no parameters!')
@@ -939,9 +937,11 @@ class Pipeline:
         print('Creating Prediction {}'.format(version))
         data_process = self.dataProcessor.export_function()
         feature_process = self.featureProcessor.export_function()
-        return """import pandas as pd
+        return '''import re
+import copy
+import itertools
 import numpy as np
-import struct, re, copy, os
+import pandas as pd
 
 
 class Predict(object):
@@ -949,8 +949,9 @@ class Predict(object):
     def __init__(self):
         self.version = '{}'
 
-    def predict(self, model, features, data, **args):
-        '''
+    @staticmethod
+    def predict(model, features, data, **args):
+        """
         Prediction function for Amplo AutoML.
         This is in a predefined format:
         - a 'Predict' class, with a 'predict' function taking the arguments:
@@ -958,10 +959,10 @@ class Predict(object):
             features: list of strings containing all features fed to the model
             data: the data to predict on
         Note: May depend on additional named arguments within args.
-        '''
+        """
         ###############
         # Custom Code #
-        ###############""".format(version) + textwrap.indent(custom_code, '    ') \
+        ###############'''.format(version) + textwrap.indent(custom_code, '    ') \
                + data_process + feature_process + '''
         ###########
         # Predict #
@@ -971,20 +972,20 @@ class Predict(object):
         # Normalize
         if normalize:
             assert 'scaler' in args.keys(), 'When Normalizing=True, scaler needs to be provided in args'
-            X = args['scaler'].transform(X)
+            x = args['scaler'].transform(x)
 
         # Predict
         if mode == 'regression':
             if normalize:
                 assert 'o_scaler' in args.keys(), 'When Normalizing=True, o_scaler needs to be provided in args'
-                predictions = args['OutputScaler'].inverse_transform(model.predict(X))
+                return args['OutputScaler'].inverse_transform(model.predict(x))
             else:
-                predictions = model.predict(X)
-        if mode == 'classification':
+                return model.predict(x)
+        elif mode == 'classification':
             try:
-                predictions = model.predict_proba(X)[:, 1]
-            except:
-                predictions = model.predict(X)
-
-        return predictions
+                return model.predict_proba(x)
+            except AttributeError:
+                return model.predict(x)
+        else:
+            raise NotImplementedError('Mode not supported, pick between classification and regression.')
 '''.format(self.mode, self.normalize)

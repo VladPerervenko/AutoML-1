@@ -100,7 +100,6 @@ class FeatureProcessing:
         if not os.path.exists(self.folder):
             os.makedirs(self.folder)
 
-
     def extract(self, input_frame, output_frame):
         self._clean_set(input_frame, output_frame)
         if self.extractFeatures:
@@ -233,6 +232,7 @@ class FeatureProcessing:
 
     def export_function(self):
         code = inspect.getsource(self.transform)
+        code = code[code.find('\n')+1:]
         return """
 
         ############
