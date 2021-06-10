@@ -47,3 +47,9 @@ class TestModelling(unittest.TestCase):
         assert 'model' in mod.results.keys()
         assert 'dataset' in mod.results.keys()
         assert 'params' in mod.results.keys()
+
+    def test_return(self):
+        Modelling(mode='regression', samples=100).return_models()
+        Modelling(mode='regression', samples=100000).return_models()
+        Modelling(mode='classification', samples=100).return_models()
+        Modelling(mode='classification', samples=100000).return_models()
