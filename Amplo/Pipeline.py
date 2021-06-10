@@ -21,22 +21,25 @@ from sklearn.preprocessing import StandardScaler
 from . import Utils
 from .AutoML.Sequence import Sequence
 from .AutoML.Modelling import Modelling
-from .AutoML.Documenting import Documenting
 from .AutoML.DataExploring import DataExploring
 from .AutoML.DataProcessing import DataProcessing
 from .AutoML.FeatureProcessing import FeatureProcessing
 from .GridSearch.BaseGridSearch import BaseGridSearch
 from .GridSearch.HalvingGridSearch import HalvingGridSearch
 from .GridSearch.OptunaGridSearch import OptunaGridSearch
+from .Documenting.BinaryDocumenting import BinaryDocumenting
 
 
 # noinspection PyUnresolvedReferences
 class Pipeline:
     # todo integrate minorVersion (also with folder)
+    # todo check whether normalization is beneficial
 
     def __init__(self,
                  target,
                  project='',
+                 device='',
+                 issue='',
                  version=None,
                  mode='regression',
                  objective='r2',
@@ -98,14 +101,14 @@ class Pipeline:
         print('\n\n*** Starting Amplo AutoML - {} ***\n\n'.format(project))
 
         # Parsing input
-        if len(project) == 0:
-            self.mainDir = 'AutoML/'
-        else:
-            self.mainDir = project if project[-1] == '/' else project + '/'
+        self.mainDir = 'AutoML/'
         self.target = re.sub('[^a-z0-9]', '_', target.lower())
         self.verbose = verbose
         self.customCode = custom_code
         self.fastRun = fast_run
+        self.project = project
+        self.device = device
+        self.issue = issue
 
         # Checks
         assert mode == 'regression' or mode == 'classification', 'Supported modes: regression, classification.'
@@ -185,6 +188,7 @@ class Pipeline:
         self.y = None
         self.colKeep = None
         self.results = None
+        self.n_classes = None
 
         # Flags
         self._set_flags()
@@ -320,6 +324,7 @@ class Pipeline:
         assert isinstance(data, pd.DataFrame), 'Data must be Pandas'
         assert len(data) > 0, 'Dataframe has length zero'
         assert self.target in data.keys(), 'Target missing in data'
+
         # Execute pipeline
         self._data_processing(data)
         self._eda()
@@ -359,11 +364,12 @@ class Pipeline:
             self.x = self.x.drop(self.target, axis=1)
 
         # Assert classes in case of classification
+        self.n_classes = self.y.nunique()
         if self.mode == 'classification':
-            if self.y.nunique() >= 50:
-                warnings.warn('More than 50 classes, you might want to reconsider')
+            if self.n_classes >= 50:
+                warnings.warn('More than 50 classes, you may want to reconsider classification mode')
             if set(self.y) != set([i for i in range(len(set(self.y)))]):
-                warnings.warn('Classes should be [0, 1, ...]')
+                raise ValueError('Classes should be [0, 1, ...]')
 
     def _feature_processing(self):
         # Check if exists
@@ -386,6 +392,19 @@ class Pipeline:
         # Load existing results
         if 'Results.csv' in os.listdir(self.mainDir):
             self.results = pd.read_csv(self.mainDir + 'Results.csv')
+
+            # Printing here as we load it
+            results = self.results[np.logical_and(
+                self.results['version'] == self.version,
+                self.results['type'] == 'Initial modelling'
+            )]
+            for fs in set(results['dataset']):
+                print('[AutoML] Initial Modelling for {} ({})'.format(fs, len(self.colKeep[fs])))
+                fsr = results[results['dataset'] == fs]
+                for i in range(len(fsr)):
+                    row = fsr.iloc[i]
+                    print('[AutoML] {} {}: {:.4f} \u00B1 {:.4f}'.format(row['model'].ljust(40), self.objective,
+                                                                        row['mean_objective'], row['std_objective']))
 
         # Check if this version has been modelled
         if self.results is not None and self.version in self.results['version'].values:
@@ -701,7 +720,7 @@ class Pipeline:
         Loads the model and features and initiates the outside Documenting class.
         """
         assert feature_set in self.colKeep.keys(), 'Feature Set not available.'
-        if os.path.exists(self.mainDir + 'Documentation/v{}/{}_{}.md'.format(
+        if os.path.exists(self.mainDir + 'Documentation/v{}/{}_{}.pdf'.format(
                 self.version, type(model).__name__, feature_set)):
             print('[AutoML] Documentation existing for {} v{} - {} '.format(
                 type(model).__name__, self.version, feature_set))
@@ -715,11 +734,12 @@ class Pipeline:
             model = models[[i for i in range(len(models)) if type(models[i]).__name__ == model][0]]
 
         # Run validation
-        documenting = Documenting(self)
-        markdown = documenting.create(model, feature_set)
-        with open(self.mainDir + 'Documentation/v{}/{}_{}.md'.format(self.version, type(model).__name__, feature_set),
-                  'w') as f:
-            f.write(markdown)
+        print('[AutoML] Creating Documentation for {} - {}'.format(type(model).__name__, feature_set))
+        if self.mode == 'classification' and self.n_classes == 2:
+            documenting = BinaryDocumenting(self)
+        else:
+            raise NotImplementedError()
+        documenting.create(model, feature_set)
 
     def _prepare_production_files(self, model=None, feature_set=None, params=None):
         if not os.path.exists(self.mainDir + 'Production/v{}/'.format(self.version)):
