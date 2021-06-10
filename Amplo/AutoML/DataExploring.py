@@ -32,11 +32,11 @@ class DataExploring:
                  differ=0,
                  pre_tag='',
                  max_samples=10000,
-                 season_periods=None,
+                 season_periods=24,
                  lags=60,
                  skip_completed=True,
                  folder='',
-                 version=None):
+                 version=0):
         """
         Automated Exploratory Data Analysis. Covers binary classification and regression.
         It generates:
