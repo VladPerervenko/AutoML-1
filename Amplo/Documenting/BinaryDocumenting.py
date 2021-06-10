@@ -40,7 +40,8 @@ class BinaryDocumenting(FPDF):
         self.y = None
 
     def header(self):
-        self.image('Amplo/Static/logo.png', x=self.pm, y=self.pm, w=55, h=15)
+        self.image('https://raw.githubusercontent.com/nielsuit227/AutoML/main/Amplo/Static/logo.png',
+                   x=self.pm, y=self.pm, w=55, h=15)
         self.set_font('Helvetica', '', 14)
         self.set_text_color(100, 100, 100)
         self.cell(self.WIDTH - 80)
