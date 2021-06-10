@@ -313,6 +313,20 @@ class BinaryDocumenting(FPDF):
         elif 'Linear' in self.mName:
             return "Linear models are simple algorithms where the inputs are multiplied by optimized weights to " \
                    "predict the output. "
+        elif 'Bagging' in self.mName:
+            return """Bagging algorithms is an ensemble algorithm. Just like a Random Forest, it trains many 
+            Decision Trees. It then makes a prediction based on a voting base, the average of the prediction  
+            of the individual Decision Trees will be predicted by the Bagging algorithm. Contrary to a Random Forest,
+            the Bagging algorithm does not allocate subsets of features or data to the individual Decision Trees.
+            """
+        elif 'Stacking' in self.mName:
+            return """A Stacking algorithm is a linear algorithm that uses the prediction of various models. In our 
+            AutoML pipeline, we first train all included models, optimize the hyper parameters of the well performing 
+            ones and then take the three best combinations. Additionally, we add a Naive Bayes, a Linear Model and a 
+            K-Nearest Neighbors algorithm on top. 
+            """
+        else:
+            return """Model description yet to be included in this documenter."""
 
     def model_performance(self):
         if not self.check_new_page():
