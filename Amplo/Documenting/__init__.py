@@ -1,1 +1,3 @@
 from .BinaryDocumenting import BinaryDocumenting
+from .MultiDocumenting import MultiDocumenting
+from .RegressionDocumenting import RegressionDocumenting

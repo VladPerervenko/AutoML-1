@@ -1,5 +1,4 @@
 import os
-import math
 import copy
 import numpy as np
 from sklearn import metrics
@@ -60,9 +59,22 @@ class MultiDocumenting(BinaryDocumenting):
             print('Log Loss:         {:.2f} \u00B1 {:.2f}'.format(np.mean(log_loss), np.std(log_loss)))
             self.metrics['Log Loss'] = [np.mean(log_loss), np.std(log_loss)]
 
+        if not os.path.exists(self.p.mainDir + 'EDA/Features/v{}/RF.png'.format(self.p.version)):
+            os.makedirs(self.p.mainDir + 'EDA/Features/v{}/'.format(self.p.version))
+            from sklearn.ensemble import RandomForestClassifier
+            model = RandomForestClassifier()
+            model.fit(self.p.x, self.p.y)
+            fig, ax = plt.subplots(figsize=[4, 6], constrained_layout=True)
+            plt.subplots_adjust(left=0.5, top=1, bottom=0)
+            ax.spines['right'].set_visible(False)
+            ax.spines['bottom'].set_visible(False)
+            ax.spines['top'].set_visible(False)
+            ind = np.argsort(model.feature_importances_)
+            plt.barh(list(self.p.x.keys()[ind])[-15:], width=model.feature_importances_[ind][-15:],
+                     color='#2369ec')
+            fig.savefig(self.p.mainDir + 'EDA/Features/v{}/RF.png'.format(self.p.version), format='png', dpi=200)
+
     def model_performance(self):
-        # todo adapt multiclass matrix (maybe change to a plot?)
-        # todo remove figures
         self.ln(self.lh)
         self.add_h2('Model Performance')
         self.add_text('Model performance is analysed by various metrics. This model has been selected based on the {} '
@@ -81,43 +93,47 @@ class MultiDocumenting(BinaryDocumenting):
         self.ln(self.lh * 3)
 
         # Confusion Matrix
-        n_classes = 2
-        cell_width = int((self.WIDTH - self.pm * 4 - self.tm * n_classes) / (n_classes + 2))
+        nc = self.p.n_classes
+        cell_width = int((self.WIDTH - self.pm * 2) / (nc + 2))
         self.add_h3('Confusion Matrix')
 
         # First row
         self.set_font('Helvetica', 'B', 12)
         self.cell(w=cell_width * 2, h=self.lh, txt='', align='L', border='R')
-        self.cell(w=cell_width * n_classes, h=self.lh, txt='True Class', align='C')
+        self.cell(w=cell_width * nc, h=self.lh, txt='True Class', align='C')
         self.ln(self.lh)
 
         # Second Row
-        self.cell(w=cell_width * 2, h=self.lh, txt='', align='L', border='BR')
-        self.cell(w=cell_width, h=self.lh, txt='Faulty', align='C', border='B')
-        self.cell(w=cell_width, h=self.lh, txt='Healthy', align='C', border='B')
+        self.cell(w=cell_width * 2, h=self.lh, txt='', align='L', border='B')
+        for i in range(nc):
+            self.cell(w=cell_width, h=self.lh, txt='Class {}'.format(i), align='C', border='BL')
         self.ln(self.lh)
 
-        # Third Row (first with values)
-        self.cell(w=cell_width, h=self.lh * 2, txt='Prediction', align='L')
-        self.cell(w=cell_width, h=self.lh, txt='Faulty', align='L', border='R')
-        self.set_font('Helvetica', '', 12)
-        self.cell(w=cell_width, h=self.lh, txt='{:.2f} \u00B1 {:.2f} %'.format(
-            self.confusion_matrix['means'][0][0], self.confusion_matrix['stds'][0][0]),
-                  align='C')
-        self.cell(w=cell_width, h=self.lh, txt='{:.2f} \u00B1 {:.2f} %'.format(
-            self.confusion_matrix['means'][0][1], self.confusion_matrix['stds'][0][1]),
-                  align='C')
-        self.ln(self.lh)
+        # Values
+        for i in range(nc):
+            # Set bold
+            self.set_font('Helvetica', 'B', 12)
+            # Prediction (only for first time)
+            if i == 0:
+                self.cell(w=cell_width, h=self.lh * nc, txt='Prediction', align='L')
+            else:
+                self.cell(w=cell_width, h=self.lh, txt='')
+            # Class
+            self.cell(w=cell_width, h=self.lh, txt='Class {}'.format(i), align='L', border='R')
+            # Set normal
+            self.set_font('Helvetica', '', 12)
+            for j in range(nc):
+                self.cell(w=cell_width, h=self.lh, txt='{:.1f}\u00B1{:.1f} %'.format(
+                    self.confusion_matrix['means'][i][j], self.confusion_matrix['stds'][i][j]), align='C')
+            self.ln(self.lh)
 
-        # Fourth Row
-        self.set_font('Helvetica', 'B', 12)
-        self.cell(w=cell_width, h=self.lh, txt='', align='L')
-        self.cell(w=cell_width, h=self.lh, txt='Healthy', align='L', border='R')
-        self.set_font('Helvetica', '', 12)
-        self.cell(w=cell_width, h=self.lh, txt='{:.2f} \u00B1 {:.2f} %'.format(
-            self.confusion_matrix['means'][1][0], self.confusion_matrix['stds'][1][0]),
-                  align='C')
-        self.cell(w=cell_width, h=self.lh, txt='{:.2f} \u00B1 {:.2f} %'.format(
-            self.confusion_matrix['means'][1][1], self.confusion_matrix['stds'][1][1]),
-                  align='C')
-        self.ln(self.lh * 2)
+    def validation(self):
+        self.ln(self.lh)
+        self.check_new_page()
+        self.add_h3('Validation Strategy')
+        self.add_text("All experiments are cross-validated. This means that every time a model's "
+                      "performance is evaluated, it's trained on one part of the data, and test on another. Therefore, "
+                      "the model is always test against data it has not yet been trained for. This gives the best "
+                      "approximation for real world (out of sample) performance. The current validation strategy used "
+                      "is {}, with {} splits and {} shuffling the data.".format(
+            type(self.cv).__name__, self.p.cvSplits, 'with' if self.p.shuffle else 'without'))

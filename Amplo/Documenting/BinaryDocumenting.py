@@ -80,7 +80,7 @@ class BinaryDocumenting(FPDF):
         # Create PDF
         self.add_page()
         self.add_h1('{} - {} - {}'.format(self.project, self.device, self.issue))
-        self.add_h2('{} - {}'.format(self.mName, self.p.version))
+        self.add_h2('{} - v{}'.format(self.mName, self.p.version))
         self.add_text(self.model_description)
         self.model_performance()
         self.validation()
@@ -241,7 +241,7 @@ class BinaryDocumenting(FPDF):
                      color='#2369ec')
             fig.savefig(self.p.mainDir + 'EDA/Features/v{}/RF.png'.format(self.p.version), format='png', dpi=200)
 
-    def check_new_page(self, margin=250):
+    def check_new_page(self, margin=220):
         if self.get_y() > margin:
             self.add_page()
             return True
@@ -276,42 +276,46 @@ class BinaryDocumenting(FPDF):
 
     @property
     def model_description(self):
-        if self.mName == 'CatBoostClassifier':
+        if 'CatBoost' in self.mName:
             return "CatBoost, or Categorical Boosting,  is an algorithm for gradient boosting on " \
                    "decision trees, with natural implementation for categorical variables. It is similar to " \
                    "XGBoost and LightGBM but differs in implementation of the optimization algorithm. We often " \
                    "see this algorithm performing very well."
-        elif self.mName == 'XGBClassifier':
+        elif 'XGB' in self.mName:
             return "XGBoost, or Extreme Gradient Boosting, is an algorithm for gradient boosting on " \
                    "decision trees. It trains many decision trees sequentially, the additional tree always " \
                    "trying to mitigate the error of the whole model. XGBoost was the first gradient boosting " \
                    "algorithm to be implemented and is currently widely adopted in the ML world. "
-        elif self.model == 'LGBMClassifier':
+        elif 'LGBM' in self.mName:
             return "LightGBM, or Light Gradient Boosting Machine, is an iteration on the XGBoost" \
                    " algorithm. Similarly, it uses gradient boosting with decision trees. However, XGBoost tend " \
                    "to be slow for a larger number of samples (>10.000), but with leaf-wise growth instead of " \
                    "depth-wise growth, LightGBM increases training speed significantly. Performance is often " \
                    "close to XGBoost, sometimes for the better and sometimes for the worse."
-        elif self.mName == 'HistGradientBoostingClassifier':
+        elif 'HistG' in self.mName:
             return "SciKits implementation of LightGBM, or Light Gradient Boosting Machine, is" \
                    " an iteration on the XGBoost " \
                    "algorithm. Similarly, it uses gradient boosting with decision trees. However, XGBoost tend " \
                    "to be slow for a larger number of samples (>10.000), but with leaf-wise growth instead of " \
                    "depth-wise growth, LightGBM increases training speed significantly. Performance is often " \
                    "close to XGBoost, sometimes for the better and sometimes for the worse. "
-        elif self.mName == 'GradientBoostingClassifier':
+        elif 'GradientB' in self.mName:
             return "SciKits implementation of XGBoost, or Extreme Gradient Boosting, is an algorithm for" \
                    " gradient boosting on " \
                    "decision trees. It trains many decision trees sequentially, the additional tree always " \
                    "trying to mitigate the error of the whole model. XGBoost was the first gradient boosting " \
                    "algorithm to be implemented and is currently widely adopted in the ML world. "
-        elif self.mName == 'RandomForestClassifier':
+        elif 'RandomForest' in self.mName:
             return "Random Forest, is an ensemble algorithm that combines many (100-1000) decision trees and " \
                    "predicts the average of all trained trees. Though gradient boosting methods often outperform " \
                    "Random Forest, some data characteristics favor the Random Forests performance. "
+        elif 'Linear' in self.mName:
+            return "Linear models are simple algorithms where the inputs are multiplied by optimized weights to " \
+                   "predict the output. "
 
     def model_performance(self):
-        self.ln(self.lh)
+        if not self.check_new_page():
+            self.ln(self.lh)
         self.add_h2('Model Performance')
         self.add_text('Model performance is analysed by various metrics. This model has been selected based on the {} '
                       'score.'.format(self.p.objective))
@@ -371,6 +375,8 @@ class BinaryDocumenting(FPDF):
         self.ln(self.lh * 2)
 
     def validation(self):
+        if not self.check_new_page():
+            self.ln(self.lh)
         self.ln(self.lh * 2)
         self.add_h3('Area Under Curve & Cross Validation Plots')
         x, y = self.get_x(), self.get_y()
@@ -390,9 +396,12 @@ class BinaryDocumenting(FPDF):
         self.ln(self.lh)
 
     def parameters(self):
+        if not self.check_new_page():
+            self.ln(self.lh)
         params = self.model.get_params()
         n_params = len(params)
         keys, values = list(params.keys()), list(params.values())
+        self.ln(self.lh)
         self.add_h2('Model Parameters')
         self.set_font('Helvetica', 'B', 12)
 
@@ -440,8 +449,8 @@ class BinaryDocumenting(FPDF):
             'Lagged Features': self.p.featureProcessor.laggedFeatures,
             'Differentiated Features': self.p.featureProcessor.diffFeatures,
         }
-        self.check_new_page(margin=270 - min(50, len(features['Co-Linear Features'])))
-        self.ln(20)
+        if not self.check_new_page():
+            self.ln(20)
         self.add_h2('Features')
 
         # Feature Extraction
@@ -461,7 +470,7 @@ class BinaryDocumenting(FPDF):
         # Not supported now as multicell adds whitespace in between rows, maybe appendix?
         # self.cell(w=120, h=self.lh, txt='Features', border='B', align='C')
         self.set_font('Helvetica', '', 12)
-        n_rows = max([len(v) for v in features.values()])
+        # n_rows = max([len(v) for v in features.values()])
         for k, v in features.items():
             self.ln(self.lh)
             # h = max(- (- sum([len(i) for i in v]) // 60), 1)
@@ -502,8 +511,9 @@ class BinaryDocumenting(FPDF):
         ))
 
     def score_board(self):
+        if not self.check_new_page():
+            self.ln(self.lh)
         scores = self.p.results
-        self.check_new_page()
         self.ln(self.lh)
         self.add_h2('Model Score Board')
         self.add_text("Not only the {} has been optimized by the AutoML pipeline. In total, {} models where trained. "
@@ -512,14 +522,14 @@ class BinaryDocumenting(FPDF):
         self.ln(self.lh)
         # Table
         self.set_font('Helvetica', 'B', 12)
-        self.cell(w=50, h=self.lh, txt='Model', border='RB', align='C')
-        self.cell(w=50, h=self.lh, txt=self.p.objective, border='RB', align='C')
+        self.cell(w=70, h=self.lh, txt='Model', border='RB', align='C')
+        self.cell(w=70, h=self.lh, txt=self.p.objective, border='B', align='C')
         # no space for parameters, move to appendix if wanted
         # self.cell(w=100, h=self.lh, txt='Parameters', border='B', align='C')
         self.set_font('Helvetica', '', 12)
         for i in range(min(10, len(scores))):
             self.ln(self.lh)
-            self.cell(w=50, h=self.lh, txt='{}'.format(scores.iloc[i]['model']), border='R', align="C")
-            self.cell(w=50, h=self.lh, txt='{:.4f} \u00B1 {:.4f} %'.format(scores.iloc[i]['mean_objective'],
+            self.cell(w=70, h=self.lh, txt='{}'.format(scores.iloc[i]['model']), border='R', align="C")
+            self.cell(w=70, h=self.lh, txt='{:.4f} \u00B1 {:.4f} %'.format(scores.iloc[i]['mean_objective'],
                                                                          scores.iloc[i]['std_objective']), align='C')
             # self.cell(w=25, h=self.lh, txt='{}'.format(scores.iloc[i]['params']), border='L', align='L')

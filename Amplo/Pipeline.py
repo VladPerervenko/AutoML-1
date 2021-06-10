@@ -19,15 +19,20 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 
 from . import Utils
+
 from .AutoML.Sequence import Sequence
 from .AutoML.Modelling import Modelling
 from .AutoML.DataExploring import DataExploring
 from .AutoML.DataProcessing import DataProcessing
 from .AutoML.FeatureProcessing import FeatureProcessing
+
 from .GridSearch.BaseGridSearch import BaseGridSearch
 from .GridSearch.HalvingGridSearch import HalvingGridSearch
 from .GridSearch.OptunaGridSearch import OptunaGridSearch
+
+from .Documenting.MultiDocumenting import MultiDocumenting
 from .Documenting.BinaryDocumenting import BinaryDocumenting
+from .Documenting.RegressionDocumenting import RegressionDocumenting
 
 
 # noinspection PyUnresolvedReferences
@@ -737,8 +742,10 @@ class Pipeline:
         print('[AutoML] Creating Documentation for {} - {}'.format(type(model).__name__, feature_set))
         if self.mode == 'classification' and self.n_classes == 2:
             documenting = BinaryDocumenting(self)
-        else:
-            raise NotImplementedError()
+        elif self.mode == 'classification':
+            documenting = MultiDocumenting(self)
+        elif self.mode == 'regression':
+            documenting = RegressionDocumenting(self)
         documenting.create(model, feature_set)
 
     def _prepare_production_files(self, model=None, feature_set=None, params=None):
