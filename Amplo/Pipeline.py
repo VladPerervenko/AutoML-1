@@ -872,12 +872,8 @@ class Pipeline:
 
         # Normalize
         if self.normalize:
-            # scaler = pickle.load(open(self.mainDir + folder + 'Scaler.pickle', 'rb'))
-            scaler = self.bestScaler
-            x[x.keys()] = scaler.transform(x)
+            x[x.keys()] = self.bestScaler.transform(x)
             if self.mode == 'regression' and y is not None:
-                # output_scaler = pickle.load(open(self.mainDir + folder + 'OutputScaler.pickle', 'rb'))
-                # y = output_scaler.transform(y)
                 y = self.bestOutputScaler.transform(y)
 
         # Return
@@ -888,31 +884,22 @@ class Pipeline:
         Full script to make predictions. Uses 'Production' folder with defined or latest version.
         @param data: data to do prediction on
         """
-        # todo save all inside one pickle --> self.bestX can be used, but needs to be loaded
         # Feature Extraction, Selection and Normalization
-        # model = joblib.load(self.mainDir + 'Production/v{}/Model.joblib'.format(self.version))
         if self.verbose > 0:
-            # print('[AutoML] Predicting with {}, v{}'.format(type(model).__name__, self.version))
             print('[AutoML] Predicting with {}, v{}'.format(type(self.bestModel).__name__, self.version))
         x, y = self.convert_data(data)
 
         # Predict
         if self.mode == 'regression':
             if self.normalize:
-                # output_scaler = pickle.load(open(self.mainDir + 'Production/v{}/OutputScaler.pickle'.format(
-                #     self.version), 'rb'))
-                # predictions = output_scaler.inverse_transform(model.predict(x))
                 predictions = self.bestOutputScaler.invers_transform(self.bestModel.predict(x))
             else:
-                # predictions = model.predict(x)
                 predictions = self.bestModel.predict(x)
         elif self.mode == 'classification':
             try:
                 predictions = self.bestModel.predict_proba(x)
-                # predictions = model.predict_proba(x)[:, 1]
             except AttributeError:
                 predictions = self.bestModel.predict(x)
-                # predictions = model.predict(x)
         else:
             raise ValueError('Unsupported mode')
 
@@ -923,9 +910,6 @@ class Pipeline:
         Returns probabilistic prediction, only for classification.
         @param data: data to do prediction on
         """
-        # Load model
-        model = joblib.load(self.mainDir + 'Production/v{}/Model.joblib'.format(self.version))
-
         # Tests
         assert self.mode == 'classification', 'Predict_proba only available for classification'
         assert hasattr(model, 'predict_proba'), '{} has no attribute predict_proba'.format(
@@ -933,13 +917,13 @@ class Pipeline:
 
         # Print
         if self.verbose > 0:
-            print('[AutoML] Predicting with {}, v{}'.format(type(model).__name__, self.version))
+            print('[AutoML] Predicting with {}, v{}'.format(type(self.bestModel).__name__, self.version))
 
         # Convert data
         x, y = self.convert_data(data)
 
         # Predict
-        return model.predict_proba(x)
+        return self.bestModel.predict_proba(x)
 
     def create_predict_function(self, custom_code):
         """
