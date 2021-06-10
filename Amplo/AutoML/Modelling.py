@@ -84,7 +84,7 @@ class Modelling:
 
         # Folder
         self.folder = folder if len(folder) == 0 or folder[-1] == '/' else folder + '/'
-        if store_results or store_models:
+        if (store_results or store_models) and self.folder != '':
             if not os.path.exists(self.folder):
                 os.makedirs(self.folder)
 
