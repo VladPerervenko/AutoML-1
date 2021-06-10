@@ -25,7 +25,7 @@ class Modelling:
                  n_splits=3,
                  objective='accuracy',
                  samples=None,
-                 folder='models/',
+                 folder='',
                  dataset='set_0',
                  store_models=False,
                  store_results=True):
@@ -83,7 +83,7 @@ class Modelling:
                                              'mean_time', 'std_time'])
 
         # Folder
-        self.folder = folder if folder[-1] == '/' else folder + '/'
+        self.folder = folder if len(folder) == 0 or folder[-1] == '/' else folder + '/'
         if store_results or store_models:
             if not os.path.exists(self.folder):
                 os.makedirs(self.folder)
