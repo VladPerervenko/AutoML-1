@@ -30,7 +30,7 @@ class FeatureProcessing:
                  folder='',
                  mode='classification',
                  timeout=900,
-                 version=''):
+                 version=0):
         """
         Automatically extracts and selects features. Removes Co-Linear Features.
         Included Feature Extraction algorithms:
@@ -695,12 +695,12 @@ class FeatureProcessing:
         sfi = fi.sum()
         ind = np.flip(np.argsort(fi))
         # Info Threshold
-        ind_keep = [ind[i] for i in range(len(ind)) if fi[ind[:i]].sum() <= 0.95 * sfi]
+        ind_keep = [ind[i] for i in range(len(ind)) if fi[ind[:i]].sum() <= 0.85 * sfi]
         threshold = self.x.keys()[ind_keep].to_list()
-        ind_keep = [ind[i] for i in range(len(ind)) if fi[i] > sfi / 100]
+        ind_keep = [ind[i] for i in range(len(ind)) if fi[i] > sfi / 200]
         increment = self.x.keys()[ind_keep].to_list()
-        print('[Features] Selected {} features with 95% RF threshold'.format(len(threshold)))
-        print('[Features] Selected {} features with 1% RF increment'.format(len(increment)))
+        print('[Features] Selected {} features with 85% RF threshold'.format(len(threshold)))
+        print('[Features] Selected {} features with 0.5% RF increment'.format(len(increment)))
         return threshold, increment
 
     def _borutapy(self):
