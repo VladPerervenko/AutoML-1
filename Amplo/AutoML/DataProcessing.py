@@ -79,9 +79,10 @@ class DataProcessing:
         self.outlier_removal = outlier_removal
         self.z_score_threshold = z_score_threshold
 
-        # Statistics for Documenting
+        # Info for Documenting
         self.removedDuplicateRows = 0
         self.removedDuplicateColumns = 0
+        self.removedOutliers = 0
         self.imputedMissingValues = 0
         self.removedConstantColumns = 0
 
@@ -106,6 +107,7 @@ class DataProcessing:
         data = self.convert_data_types(data)
 
         # Remove outliers
+        self.removedOutliers = self.check_outliers(data)
         data = self.remove_outliers(data)
         # Note
         self.imputedMissingValues = np.sum(np.isnan(data.values)) + np.sum(data.values == np.Inf) + \
@@ -153,6 +155,18 @@ class DataProcessing:
         # Remove Constants
         data = data.drop(columns=data.columns[data.nunique() == 1])
         return data
+
+    def check_outliers(self, data):
+        if self.outlier_removal == 'boxplot':
+            q1 = data.quantile(0.25)
+            q3 = data.quantile(0.75)
+            return (data > q3).sum().sum() or (data < q1).sum().sum()
+        elif self.outlier_removal == 'z-score':
+            z_score = (data - data.mean(skipna=True, numeric_only=True)) \
+                     / data.std(skipna=True, numeric_only=True)
+            return (z_score > self.z_score_threshold).sum().sum()
+        elif self.outlier_removal == 'clip':
+            return (data > 1e12).sum().sum() + (data < -1e12).sum().sum()
 
     def remove_outliers(self, data):
         # Remove Outliers
