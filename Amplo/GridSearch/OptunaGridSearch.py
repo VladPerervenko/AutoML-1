@@ -10,7 +10,7 @@ from sklearn.metrics import SCORERS
 
 
 class OptunaGridSearch:
-    # todo remove params
+    # todo remove params from arg
 
     def __init__(self, model, params=None, cv=KFold(n_splits=3), scoring='accuracy', verbose=0, timeout=3600,
                  candidates=250):
@@ -273,7 +273,7 @@ class OptunaGridSearch:
 
         # Set up study
         study = optuna.create_study(sampler=optuna.samplers.TPESampler(), direction='maximize')
-        study.optimize(self.objective, timeout=self.timeout, n_trials=self.nTrials, show_progress_bar=True)
+        study.optimize(self.objective, timeout=self.timeout, n_trials=self.nTrials)
 
         # Parse results
         optuna_results = study.trials_dataframe()
