@@ -664,7 +664,7 @@ class Pipeline:
                     stacking_models.append(('GaussianNB', naive_bayes.GaussianNB()))
                 if 'SVC' not in stacking_models_str and len(self.x) < 5000:
                     stacking_models.append(('SVC', svm.SVC()))
-                level_one = linear_model.LogisticRegression()
+                level_one = linear_model.LogisticRegression(max_iter=500)
                 stack = ensemble.StackingClassifier(stacking_models, final_estimator=level_one)
                 cv = StratifiedKFold(n_splits=self.cvSplits, shuffle=self.shuffle)
             else:
