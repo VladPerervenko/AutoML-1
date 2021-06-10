@@ -121,7 +121,7 @@ class DataProcessing:
         # Remove Constants
         data = self.remove_constants(data)
         # Note
-        self.removedConstantColumns = len(data.keys()) - columns
+        self.removedConstantColumns = columns - len(data.keys())
 
         # Finish
         self._store(data)

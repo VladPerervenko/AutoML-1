@@ -387,7 +387,7 @@ class BinaryDocumenting(FPDF):
         self.cell(w=cell_width, h=self.lh, txt='{:.2f} \u00B1 {:.2f} %'.format(
             self.confusion_matrix['means'][1][1], self.confusion_matrix['stds'][1][1]),
                   align='C')
-        self.ln(self.lh * 2)
+        self.ln(self.lh)
 
     def validation(self):
         if not self.check_new_page():
@@ -471,9 +471,10 @@ class BinaryDocumenting(FPDF):
         # Feature Extraction
         self.add_h3('Feature Extraction')
         self.add_text('First, features that are co-linear (a * x = y) up to {} % were removed. This resulted in {} '
-                      'removed features: {}'.format(
-            self.p.informationThreshold * 100, len(features['Co-Linear Features']), ', '.join(
-                [i for i in features['Co-Linear Features'][:20]])))
+                      'removed features: {}{}'.format(
+                        self.p.informationThreshold * 100, len(features['Co-Linear Features']),
+                        ', '.join([i for i in features['Co-Linear Features'][:20]]),
+                        ', ...' if len(features['Co-Linear Features']) > 20 else ' ', ))
         self.check_new_page(margin=220)
         self.add_text('Subsequently, the features were manipulated and analysed to extract additional information. All '
                       'promising combinations are analysed with a single shallow decision tree.')
@@ -482,7 +483,7 @@ class BinaryDocumenting(FPDF):
         self.set_font('Helvetica', 'B', 12)
         self.cell(w=50, h=self.lh, txt='Sort Feature', border='BR', align='C')
         self.cell(w=50, h=self.lh, txt='Quantity', border='B', align='C')
-        # Not supported now as multicell adds whitespace in between rows, maybe appendix?
+        # Not supported now as multi cell adds whitespace in between rows, maybe appendix?
         # self.cell(w=120, h=self.lh, txt='Features', border='B', align='C')
         self.set_font('Helvetica', '', 12)
         # n_rows = max([len(v) for v in features.values()])
@@ -492,7 +493,7 @@ class BinaryDocumenting(FPDF):
             self.cell(w=50, h=self.lh, txt=k, border='R', align='L')
             self.cell(w=50, h=self.lh, txt='{}'.format(len(v)), align='C')
             # self.multi_cell(w=140, h=self.lh, txt=', '.join([i for i in v]), align='L')
-        self.add_page()
+        self.check_new_page()
 
         # Feature Selection
         self.add_h3('Feature Selection')
@@ -505,7 +506,7 @@ class BinaryDocumenting(FPDF):
                             "contains all features that contribute more than 1% to the total feature importance.\nThe "
                             "top 15 feature with their mean decrease in Gini impurity are visualized on the right.")
         path = self.p.mainDir + 'EDA/Features/v{}/RF.png'.format(self.p.version)
-        self.image(name=path, x=80 + self.pm, y=y - 10, w=80, h=120)
+        self.image(name=path, x=110 + self.pm, y=y - 10, w=80, h=120)
 
     def data(self):
         if not self.check_new_page():
@@ -546,5 +547,5 @@ class BinaryDocumenting(FPDF):
             self.ln(self.lh)
             self.cell(w=70, h=self.lh, txt='{}'.format(scores.iloc[i]['model']), border='R', align="C")
             self.cell(w=70, h=self.lh, txt='{:.4f} \u00B1 {:.4f} %'.format(scores.iloc[i]['mean_objective'],
-                                                                         scores.iloc[i]['std_objective']), align='C')
+                                                                           scores.iloc[i]['std_objective']), align='C')
             # self.cell(w=25, h=self.lh, txt='{}'.format(scores.iloc[i]['params']), border='L', align='L')

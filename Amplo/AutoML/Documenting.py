@@ -407,67 +407,6 @@ This model has been selected based on the {} score.
 """.format(self.p.objective, metrics_table, confusion_matrix)
 
     def regression_markdown(self):
-        # Cross-Validation Plots
-        fig, ax = plt.subplots(math.ceil(self.p.cvSplits / 2), 2, sharex='all', sharey='all', figsize=[24, 8])
-        fig.suptitle('{}-Fold Cross Validated Predictions - {}'.format(self.p.cvSplits, self.mName))
-
-        # Initialize iterables
-        mae = []
-        mse = []
-        r2 = []
-        max_error = []
-        rel_error = []
-        self.cv = KFold(n_splits=self.p.cvSplits, shuffle=self.p.shuffle)
-        # Cross Validate
-        i = 0
-        for i, (t, v) in enumerate(self.cv.split(self.x, self.y)):
-            xt, xv, yt, yv = self.x[t], self.x[v], self.y[t].reshape((-1)), self.y[v].reshape((-1))
-            model = copy.deepcopy(self.model)
-            model.fit(xt, yt)
-            prediction = model.predict(xv)
-
-            # Metrics
-            mae.append(metrics.mean_absolute_error(yv, prediction))
-            mse.append(metrics.mean_squared_error(yv, prediction))
-            r2.append(metrics.r2_score(yv, prediction))
-            max_error.append(metrics.max_error(yv, prediction))
-            rel_error.append(metrics.mean_absolute_percentage_error(yv, prediction))
-
-            # Plot
-            ax[i // 2][i % 2].set_title('Fold-{}'.format(i))
-            if self.p.normalize:
-                ax[i // 2][i % 2].plot(self.y_not_normalized[v], color='#2369ec')
-                ax[i // 2][i % 2].plot(self.p.bestOutputScaler.inverse_transform(model.predict(xv)),
-                                       color='#ffa62b', alpha=0.4)
-            else:
-                ax[i // 2][i % 2].plot(yv, color='#2369ec')
-                ax[i // 2][i % 2].plot(model.predict(xv), color='#ffa62b', alpha=0.4)
-
-        # Save figure
-        ax[i // 2][i % 2].legend(['Output', 'Prediction'])
-        cross_val_path = self.p.mainDir + 'Documentation/v{}/Cross_Val_{}.png'.format(self.p.version, self.mName)
-        fig.savefig(cross_val_path, format='png', dpi=200)
-
-        # Print & Finish plot
-        print('[AutoML] Mean Absolute Error:            {:.2f} \u00B1 {:.2f}'.format(np.mean(mae), np.std(mae)))
-        print('[AutoML] Mean Squared Error:             {:.2f} \u00B1 {:.2f}'.format(np.mean(mse), np.std(mse)))
-        print('[AutoML] R2 Score:                       {:.2f} \u00B1 {:.2f}'.format(np.mean(r2), np.std(r2)))
-        print('[AutoML] Max Error:                      {:.2f} \u00B1 {:.2f}'.format(
-            np.mean(max_error), np.std(max_error)))
-        print('[AutoML] Mean Absolute Relative Error:   {:.2f} \u00B1 {:.2f}'.format(
-            np.mean(rel_error), np.std(rel_error)))
-        metrics_table = """| Metric | Score |
-| --- | ---: |
-| Mean Absolute Error | {:.2f} \u00B1 {:.2f} % |
-| Mean Squared Error  | {:.2f} \u00B1 {:.2f} % |
-| R2 Score | {:.2f} \u00B1 {:.2f} % |
-| Maximum Error | {:.2f} \u00B1 {:.2f} % |
-| Mean Absolute Relative Error: | {:.2f} \u00B1 {:.2f} % |
-""".format(np.mean(mae), np.std(mae),
-           np.mean(mse), np.std(mse),
-           np.mean(r2), np.std(2),
-           np.mean(max_error), np.std(max_error),
-           np.mean(rel_error), np.std(rel_error))
         return """## Model Performance
 
 
