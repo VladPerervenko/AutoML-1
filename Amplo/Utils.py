@@ -21,7 +21,7 @@ def clean_keys(data):
         if isinstance(key, int):
             new_keys[key] = 'feature_{}'.format(key)
         else:
-            new_keys[key] = re.sub('[^a-zA-Z0-9 \n]', '_', str(key).lower()).replace('__', '_')
+            new_keys[key] = re.sub('[^a-z0-9\n]', '_', str(key).lower()).replace('__', '_')
     data = data.rename(columns=new_keys)
     return data
 
