@@ -228,7 +228,10 @@ class FeatureProcessing:
             func, key = k.split('__')
             x.loc[:, k] = getattr(np, func)(data[key])
 
-        return x[features]
+        # Enforce the right order of features
+        x = x[features]
+
+        return x
 
     def export_function(self):
         code = inspect.getsource(self.transform)
