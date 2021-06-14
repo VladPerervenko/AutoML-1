@@ -328,7 +328,7 @@ class Pipeline:
         # Tests
         assert isinstance(data, pd.DataFrame), 'Data must be Pandas'
         assert len(data) > 0, 'Dataframe has length zero'
-        assert self.target in data.keys(), 'Target missing in data'
+        assert self.target in Utils.clean_keys(data).keys(), 'Target missing in data'
 
         # Execute pipeline
         self._data_processing(data)
@@ -829,6 +829,13 @@ class Pipeline:
         # Pipeline
         pickle.dump(self, open(self.mainDir + 'Production/v{}/Pipeline.pickle'.format(self.version), 'wb'))
 
+        # Rapport
+        if not os.path.exists('{}Documentation/v{}/{}_{}.pdf'.format(self.mainDir, self.version, model, feature_set)):
+            self.document(self.bestModel, feature_set)
+        shutil.copy('{}Documentation/v{}/{}_{}.pdf'.format(self.mainDir, self.version, model, feature_set),
+                    '{}Production/v{}/{}_{}_v{}.pdf'.format(self.mainDir, self.version, self.device, self.issue,
+                                                            self.version))
+
         # Notify of results
         print('[AutoML] Preparing Production Env Files for {}, feature set {}'.format(model, feature_set))
         print('[AutoML] ', params)
@@ -896,10 +903,7 @@ class Pipeline:
             else:
                 predictions = self.bestModel.predict(x)
         elif self.mode == 'classification':
-            try:
-                predictions = self.bestModel.predict_proba(x)
-            except AttributeError:
-                predictions = self.bestModel.predict(x)
+            predictions = self.bestModel.predict(x)
         else:
             raise ValueError('Unsupported mode')
 
@@ -912,8 +916,8 @@ class Pipeline:
         """
         # Tests
         assert self.mode == 'classification', 'Predict_proba only available for classification'
-        assert hasattr(model, 'predict_proba'), '{} has no attribute predict_proba'.format(
-            type(model).__name__)
+        assert hasattr(self.bestModel, 'predict_proba'), '{} has no attribute predict_proba'.format(
+            type(self.bestModel).__name__)
 
         # Print
         if self.verbose > 0:
@@ -950,6 +954,7 @@ class Pipeline:
         feature_process = self.featureProcessor.export_function()
         return '''import re
 import copy
+import warnings
 import itertools
 import numpy as np
 import pandas as pd
