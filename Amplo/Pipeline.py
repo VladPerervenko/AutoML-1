@@ -514,7 +514,8 @@ class Pipeline:
                 params = Utils.parse_json(grid_search_results.iloc[0]['params'])
 
             # Validate
-            self._validate_result(model, params, feature_set)
+            if self.documentResults:
+                self.document(model.set_params(**params), feature_set)
             return
 
         # If arguments aren't provided, run through promising models
@@ -664,7 +665,7 @@ class Pipeline:
                     stacking_models.append(('GaussianNB', naive_bayes.GaussianNB()))
                 if 'SVC' not in stacking_models_str and len(self.x) < 5000:
                     stacking_models.append(('SVC', svm.SVC()))
-                level_one = linear_model.LogisticRegression(max_iter=500)
+                level_one = linear_model.LogisticRegression(max_iter=1000)
                 stack = ensemble.StackingClassifier(stacking_models, final_estimator=level_one)
                 cv = StratifiedKFold(n_splits=self.cvSplits, shuffle=self.shuffle)
             else:
@@ -724,6 +725,11 @@ class Pipeline:
         """
         Loads the model and features and initiates the outside Documenting class.
         """
+        # Get model
+        if isinstance(model, str):
+            models = Modelling(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
+            model = models[[i for i in range(len(models)) if type(models[i]).__name__ == model][0]]
+
         assert feature_set in self.colKeep.keys(), 'Feature Set not available.'
         if os.path.exists(self.mainDir + 'Documentation/v{}/{}_{}.pdf'.format(
                 self.version, type(model).__name__, feature_set)):
@@ -732,11 +738,6 @@ class Pipeline:
             return
         if len(model.get_params()) == 0:
             warnings.warn('[Documenting] Supplied model has no parameters!')
-
-        # Get model
-        if isinstance(model, str):
-            models = Modelling(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
-            model = models[[i for i in range(len(models)) if type(models[i]).__name__ == model][0]]
 
         # Run validation
         print('[AutoML] Creating Documentation for {} - {}'.format(type(model).__name__, feature_set))
@@ -978,7 +979,7 @@ class Predict(object):
         """
         ###############
         # Custom Code #
-        ###############'''.format(version) + textwrap.indent(custom_code, '    ') \
+        ###############'''.format(version) + textwrap.indent(custom_code, '        ') \
                + data_process + feature_process + '''
         ###########
         # Predict #
