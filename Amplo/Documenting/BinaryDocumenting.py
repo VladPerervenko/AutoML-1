@@ -228,7 +228,8 @@ class BinaryDocumenting(FPDF):
 
         # Feature Importance (only if EDA is not run)
         if not os.path.exists(self.p.mainDir + 'EDA/Features/v{}/RF.png'.format(self.p.version)):
-            os.makedirs(self.p.mainDir + 'EDA/Features/v{}/'.format(self.p.version))
+            if not os.path.exists(self.p.mainDir + 'EDA/Features/v{}'.format(self.p.version)):
+                os.makedirs(self.p.mainDir + 'EDA/Features/v{}/'.format(self.p.version))
             from sklearn.ensemble import RandomForestClassifier
             model = RandomForestClassifier()
             model.fit(self.p.x, self.p.y)

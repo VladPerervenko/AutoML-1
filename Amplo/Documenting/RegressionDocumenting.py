@@ -77,7 +77,8 @@ class RegressionDocumenting(BinaryDocumenting):
 
         # Feature Importance
         if not os.path.exists(self.p.mainDir + 'EDA/Features/v{}/RF.png'.format(self.p.version)):
-            os.makedirs(self.p.mainDir + 'EDA/Features/v{}/'.format(self.p.version))
+            if not os.path.exists(self.p.mainDir + 'EDA/Features/v{}'.format(self.p.version)):
+                os.makedirs(self.p.mainDir + 'EDA/Features/v{}/'.format(self.p.version))
             from sklearn.ensemble import RandomForestRegressor
             model = RandomForestRegressor()
             model.fit(self.p.x, self.p.y)
