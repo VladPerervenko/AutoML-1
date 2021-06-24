@@ -16,6 +16,7 @@ class XGBClassifier:
         for k, v in default.items():
             if k not in params.keys():
                 params[k] = v
+        self.default = default
         self.params = params
         self.hasPredictProba = True
         self.set_params(**self.params)
@@ -90,6 +91,9 @@ class XGBClassifier:
             return prediction
 
     def set_params(self, **params):
+        for k, v in self.default.items():
+            if k not in params.keys():
+                params[k] = v
         if 'callbacks' in params.keys():
             self.callbacks = params['callbacks']
             params.pop('callbacks')

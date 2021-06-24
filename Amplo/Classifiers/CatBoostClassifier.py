@@ -13,6 +13,7 @@ class CatBoostClassifier:
         for k, v in default.items():
             if k not in params.keys():
                 params[k] = v
+        self.default = default
         self.params = params
         self.model = catboost.CatBoostClassifier(**params)
         self.hasPredictProba = True
@@ -29,6 +30,9 @@ class CatBoostClassifier:
         self._estimator_type = 'classifier'
 
     def set_params(self, **params):
+        for k, v in self.default.items():
+            if k not in params.keys():
+                params[k] = v
         self.model.set_params(**params)
         return self
 

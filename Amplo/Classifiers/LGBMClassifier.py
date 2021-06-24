@@ -18,6 +18,7 @@ class LGBMClassifier:
             if k not in params.keys():
                 params[k] = v
         self.params = params
+        self.default = default
         self.hasPredictProba = True
         self.set_params(**self.params)
         self.classes_ = None
@@ -102,6 +103,9 @@ class LGBMClassifier:
             return np.hstack((1 - prediction, prediction)).reshape((-1, 2), order='F')
 
     def set_params(self, **params):
+        for k, v in self.default.items():
+            if k not in params.keys():
+                params[k] = v
         if 'callbacks' in params.keys():
             self.callbacks = params['callbacks']
             params.pop('callbacks')
