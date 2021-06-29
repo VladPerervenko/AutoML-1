@@ -1,7 +1,9 @@
 import os
+import json
+import types
 import pickle
-import pytest
 import shutil
+import joblib
 import unittest
 import numpy as np
 import pandas as pd
@@ -10,6 +12,13 @@ from sklearn.datasets import make_regression
 from sklearn.metrics import r2_score
 from sklearn.metrics import log_loss
 from Amplo import Pipeline
+
+
+def parseModel(module_text):
+    module_value = compile(module_text, 'Predict.py', 'exec')
+    module = types.ModuleType('Predict')
+    exec(module_value, module.__dict__)
+    return getattr(module, 'Predict')
 
 
 class TestPipeline(unittest.TestCase):
@@ -26,6 +35,7 @@ class TestPipeline(unittest.TestCase):
     def test_regression(self):
         if os.path.exists('AutoML'):
             shutil.rmtree('AutoML')
+
         pipeline = Pipeline('target',
                             project='AutoReg',
                             mode='regression',
@@ -64,6 +74,13 @@ class TestPipeline(unittest.TestCase):
         p = pickle.load(open('AutoML/Production/v0/Pipeline.pickle', 'rb'))
         assert np.allclose(p.predict(self.r_data), prediction)
 
+        # Script prediction
+        path = 'AutoML/Production/v0/'
+        model = joblib.load(path + 'Model.joblib')
+        features = json.load(open(path + 'Features.json', 'r'))
+        Predict = parseModel(open(path + 'Predict.py', 'r').read())
+        assert np.allclose(Predict().predict(model=model, features=features, data=self.r_data), prediction)
+
         # Cleanup
         shutil.rmtree('AutoML')
 
@@ -95,6 +112,17 @@ class TestPipeline(unittest.TestCase):
         # Pipeline Prediction
         prediction = pipeline.predict_proba(self.c_data)
         assert log_loss(self.c_data['target'], prediction) > -1
+
+        # Pickle prediction
+        p = pickle.load(open('AutoML/Production/v0/Pipeline.pickle', 'rb'))
+        assert np.allclose(p.predict_proba(self.c_data), prediction)
+
+        # Script prediction
+        path = 'AutoML/Production/v0/'
+        model = joblib.load(path + 'Model.joblib')
+        features = json.load(open(path + 'Features.json', 'r'))
+        Predict = parseModel(open(path + 'Predict.py', 'r').read())
+        assert np.allclose(Predict().predict(model=model, features=features, data=self.c_data), prediction)
 
         # Cleanup
         shutil.rmtree('AutoML')
