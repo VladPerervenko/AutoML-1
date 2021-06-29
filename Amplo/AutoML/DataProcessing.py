@@ -20,7 +20,6 @@ class DataProcessing:
                  z_score_threshold=4,
                  folder='',
                  version=1,
-                 mode='regression',
                  ):
         """
         Preprocessing Class. Cleans a dataset into a workable format.
@@ -41,7 +40,6 @@ class DataProcessing:
         mode str: classification / regression
         """
         # Tests
-        assert isinstance(target, str)
         assert isinstance(num_cols, list) or num_cols is None
         assert isinstance(date_cols, list) or date_cols is None
         assert isinstance(cat_cols, list) or cat_cols is None
@@ -55,15 +53,15 @@ class DataProcessing:
         assert isinstance(z_score_threshold, int)
         assert isinstance(folder, str)
         assert isinstance(version, int)
-        assert mode in ['classification', 'regression'], 'Mode needs to be classification or regression'
 
         # Parameters
+        self.target = target
+        if target is not None:
+            self.target = re.sub("[^a-z0-9]", '_', target.lower())
         self.folder = folder if len(folder) == 0 or folder[-1] == '/' else folder + '/'
-        if not os.path.exists(self.folder):
+        if len(self.folder) != 0 and not os.path.exists(self.folder):
             os.makedirs(self.folder)
         self.version = version
-        self.target = re.sub("[^a-z0-9]", '_', target.lower())
-        self.mode = mode
         self.num_cols = [] if num_cols is None else [re.sub('[^a-z0-9]', '_', nc.lower()) for nc in num_cols]
         self.cat_cols = [] if cat_cols is None else [re.sub('[^a-z0-9]', '_', cc.lower()) for cc in cat_cols]
         self.date_cols = [] if date_cols is None else [re.sub('[^a-z0-9]', '_', dc.lower()) for dc in date_cols]
@@ -88,8 +86,6 @@ class DataProcessing:
 
     def clean(self, data):
         print('[Data] Data Cleaning Started, ({} x {}) samples'.format(len(data), len(data.keys())))
-        if len(data[self.target].unique()) == 2:
-            self.mode = 'classification'
 
         # Note down
         rows, columns = len(data), len(data.keys())
@@ -110,8 +106,8 @@ class DataProcessing:
         self.removedOutliers = self.check_outliers(data)
         data = self.remove_outliers(data)
         # Note
-        self.imputedMissingValues = np.sum(np.isnan(data.values)) + np.sum(data.values == np.Inf) + \
-                                    np.sum(data.values == -np.Inf)
+        self.imputedMissingValues = np.sum(np.isnan(data.values)) + np.sum(data.values == np.Inf) + np.sum(data.values
+                                                                                                           == -np.Inf)
 
         # Remove missing values
         data = self.remove_missing_values(data)
@@ -163,7 +159,7 @@ class DataProcessing:
             return (data > q3).sum().sum() or (data < q1).sum().sum()
         elif self.outlier_removal == 'z-score':
             z_score = (data - data.mean(skipna=True, numeric_only=True)) \
-                     / data.std(skipna=True, numeric_only=True)
+                      / data.std(skipna=True, numeric_only=True)
             return (z_score > self.z_score_threshold).sum().sum()
         elif self.outlier_removal == 'clip':
             return (data > 1e12).sum().sum() + (data < -1e12).sum().sum()
@@ -178,7 +174,7 @@ class DataProcessing:
                 data.loc[data[key] > q3[key] + 1.5 * (q3[key] - q1[key]), key] = np.nan
         elif self.outlier_removal == 'z-score':
             z_score = (data - data.mean(skipna=True, numeric_only=True)) \
-                     / data.std(skipna=True, numeric_only=True)
+                      / data.std(skipna=True, numeric_only=True)
             data[z_score > self.z_score_threshold] = np.nan
         elif self.outlier_removal == 'clip':
             data = data.clip(lower=-1e12, upper=1e12)
@@ -204,11 +200,12 @@ class DataProcessing:
 
     def _store(self, data):
         # Store cleaned data
-        data.to_csv(self.folder + 'Cleaned_v{}.csv'.format(self.version), index_label='index')
+        if len(self.folder) != 0:
+            data.to_csv(self.folder + 'Cleaned_v{}.csv'.format(self.version), index_label='index')
 
     def export_function(self):
         duplicates_code = inspect.getsource(self.remove_duplicates)
-        duplicates_code = duplicates_code[duplicates_code.find('\n')+1:]
+        duplicates_code = duplicates_code[duplicates_code.find('\n') + 1:]
         function_strings = [
             textwrap.indent(inspect.getsource(clean_keys), '    '),
             duplicates_code.replace('self.', ''),
