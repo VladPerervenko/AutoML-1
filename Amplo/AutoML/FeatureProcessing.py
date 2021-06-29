@@ -20,7 +20,6 @@ from sklearn.cluster import MiniBatchKMeans
 
 
 class FeatureProcessing:
-    # todo improve thresholds of RFT / RFI
 
     def __init__(self,
                  max_lags=10,
@@ -87,6 +86,7 @@ class FeatureProcessing:
         self.addFeatures = []
         self.crossFeatures = []
         self.trigoFeatures = []
+        self.inverseFeatures = []
         self.kMeansFeatures = []
         self.laggedFeatures = []
         self.diffFeatures = []
@@ -110,6 +110,7 @@ class FeatureProcessing:
             self._add_cross_features()
             self._add_k_means_features()
             self._add_trigonometry_features()
+            self._add_inverse_features()
             self._add_diff_features()
             self._add_lagged_features()
         return self.x
@@ -139,6 +140,7 @@ class FeatureProcessing:
         cross_features = [k for k in features if '__x__' in k or '__d__' in k]
         linear_features = [k for k in features if '__sub__' in k or '__add__' in k]
         trigonometric_features = [k for k in features if 'sin__' in k or 'cos__' in k]
+        inverse_features = [k for k in features if 'inv__' in k]
         k_means_features = [k for k in features if 'dist__' in k]
         diff_features = [k for k in features if '__diff__' in k]
         lag_features = [k for k in features if '__lag__' in k]
@@ -149,6 +151,7 @@ class FeatureProcessing:
         required += list(itertools.chain.from_iterable([s.split('__')[::2] for s in cross_features]))
         required += list(itertools.chain.from_iterable([s.split('__')[::2] for s in linear_features]))
         required += list(itertools.chain.from_iterable([k.split('__')[1] for k in trigonometric_features]))
+        required += list(itertools.chain.from_iterable([k[5:] for k in inverse_features]))
         required += list(itertools.chain.from_iterable([s.split('__diff__')[0] for s in diff_features]))
         required += list(itertools.chain.from_iterable([s.split('__lag__')[0] for s in lag_features]))
 
@@ -227,6 +230,10 @@ class FeatureProcessing:
         for k in trigonometric_features:
             func, key = k.split('__')
             x.loc[:, k] = getattr(np, func)(data[key])
+
+        for k in inverse_features:
+            key = k[5:]
+            x.loc[:, k] = 1 / data[key]
 
         # Enforce the right order of features
         x = x[features]
@@ -523,6 +530,34 @@ class FeatureProcessing:
         # store
         json.dump(self.addFeatures, open(self.folder + 'addFeatures_v{}.json'.format(self.version), 'w'))
         print('[Features] Added {} additive features'.format(len(self.addFeatures)))
+
+    def _add_inverse_features(self):
+        """
+        Calculates inverse features.
+        """
+        # Load if available
+        if os.path.exists(self.folder + 'inverseFeatures_v{}.json'.format(self.version)):
+            self.inverseFeatures = json.load(open(self.folder + 'inverseFeatures_v{}.json'.format(self.version), 'r'))
+
+        # Else, find
+        else:
+            scores = {}
+            for i, key in enumerate(self.originalInput.keys()):
+                inv_feature = 1 / self.x[key]
+                score = self._analyse_feature(inv_feature)
+                if self._accept_feature(score):
+                    scores['inv__' + key] = score
+
+            self.inverseFeatures = self._select_features(scores)
+
+        # Add features
+        for k in self.inverseFeatures:
+            key = k[5:]
+            self.x[k] = 1 / self.x[key]
+
+        # Store
+        json.dump(self.inverseFeatures, open(self.folder + 'inverseFeatures_v{}.json'.format(self.version), 'w'))
+        print('[Features] Added {} inverse features.'.format(len(self.inverseFeatures)))
 
     def _add_k_means_features(self):
         """
