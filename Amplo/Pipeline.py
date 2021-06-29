@@ -206,7 +206,7 @@ class Pipeline:
 
         # Required sub-classes
         self.dataProcessor = DataProcessing(target=self.target, num_cols=self.numCols, date_cols=self.dateCols,
-                                            cat_cols=self.catCols, missing_values=self.missingValues, mode=self.mode,
+                                            cat_cols=self.catCols, missing_values=self.missingValues,
                                             outlier_removal=self.outlierRemoval, z_score_threshold=self.zScoreThreshold,
                                             folder=self.mainDir + 'Data/', version=self.version)
         self.featureProcessor = FeatureProcessing(mode=self.mode, max_lags=self.maxLags, max_diff=self.maxDiff,
@@ -999,8 +999,8 @@ class Predict(object):
         # Predict
         if mode == 'regression':
             if normalize:
-                assert 'o_scaler' in args.keys(), 'When Normalizing=True, o_scaler needs to be provided in args'
-                return args['OutputScaler'].inverse_transform(model.predict(x))
+                assert 'output_scaler' in args.keys(), 'When Normalizing=True, o_scaler needs to be provided in args'
+                return args['output_scaler'].inverse_transform(model.predict(x))
             else:
                 return model.predict(x)
         elif mode == 'classification':
