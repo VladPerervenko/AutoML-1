@@ -613,6 +613,7 @@ class Pipeline:
         --> classifiers need predict_proba
         --> level 1 needs to be ordinary least squares
         """
+        # todo normalize data to assure easier convergence
         if self.stacking:
             print('[AutoML] Creating Stacking Ensemble')
             from sklearn import neighbors
@@ -665,7 +666,11 @@ class Pipeline:
                     stacking_models.append(('GaussianNB', naive_bayes.GaussianNB()))
                 if 'SVC' not in stacking_models_str and len(self.x) < 5000:
                     stacking_models.append(('SVC', svm.SVC()))
-                level_one = linear_model.LogisticRegression(max_iter=1000)
+                # Solver
+                solver = 'lfbgs'  # Default for smaller datasets
+                if self.x.shape[0] > 10000 or self.x.shape[1] > 100:
+                    solver = 'sag'      # More efficient for larger datasets
+                level_one = linear_model.LogisticRegression(max_iter=1000, solver=solver)
                 stack = ensemble.StackingClassifier(stacking_models, final_estimator=level_one)
                 cv = StratifiedKFold(n_splits=self.cvSplits, shuffle=self.shuffle)
             else:
