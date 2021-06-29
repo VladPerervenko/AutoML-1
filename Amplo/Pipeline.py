@@ -670,7 +670,7 @@ class Pipeline:
                 solver = 'lfbgs'  # Default for smaller datasets
                 if self.x.shape[0] > 10000 or self.x.shape[1] > 100:
                     solver = 'sag'      # More efficient for larger datasets
-                level_one = linear_model.LogisticRegression(max_iter=1000, solver=solver)
+                level_one = linear_model.LogisticRegression(max_iter=2000, solver=solver)
                 stack = ensemble.StackingClassifier(stacking_models, final_estimator=level_one)
                 cv = StratifiedKFold(n_splits=self.cvSplits, shuffle=self.shuffle)
             else:
