@@ -206,7 +206,7 @@ class Pipeline:
 
         # Required sub-classes
         self.dataProcessor = DataProcessing(target=self.target, num_cols=self.numCols, date_cols=self.dateCols,
-                                            cat_cols=self.catCols, missing_values=self.missingValues, mode=self.mode,
+                                            cat_cols=self.catCols, missing_values=self.missingValues,
                                             outlier_removal=self.outlierRemoval, z_score_threshold=self.zScoreThreshold,
                                             folder=self.mainDir + 'Data/', version=self.version)
         self.featureProcessor = FeatureProcessing(mode=self.mode, max_lags=self.maxLags, max_diff=self.maxDiff,
@@ -670,7 +670,7 @@ class Pipeline:
                 solver = 'lfbgs'  # Default for smaller datasets
                 if self.x.shape[0] > 10000 or self.x.shape[1] > 100:
                     solver = 'sag'      # More efficient for larger datasets
-                level_one = linear_model.LogisticRegression(max_iter=1000, solver=solver)
+                level_one = linear_model.LogisticRegression(max_iter=2000, solver=solver)
                 stack = ensemble.StackingClassifier(stacking_models, final_estimator=level_one)
                 cv = StratifiedKFold(n_splits=self.cvSplits, shuffle=self.shuffle)
             else:
@@ -1003,8 +1003,8 @@ class Predict(object):
         # Predict
         if mode == 'regression':
             if normalize:
-                assert 'o_scaler' in args.keys(), 'When Normalizing=True, o_scaler needs to be provided in args'
-                return args['OutputScaler'].inverse_transform(model.predict(x))
+                assert 'output_scaler' in args.keys(), 'When Normalizing=True, o_scaler needs to be provided in args'
+                return args['output_scaler'].inverse_transform(model.predict(x))
             else:
                 return model.predict(x)
         elif mode == 'classification':

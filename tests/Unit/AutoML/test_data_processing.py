@@ -1,3 +1,4 @@
+import shutil
 import unittest
 import pandas as pd
 from sklearn.datasets import load_iris
@@ -18,11 +19,22 @@ class TestDataProcessing(unittest.TestCase):
             cls.regression['feature_{}'.format(i)] = x[:, i]
 
     def test_regression(self):
-        dp = DataProcessing('target', mode='regression', folder='tmp/')
+        dp = DataProcessing('target', folder='tmp/')
         cleaned = dp.clean(self.regression)
         assert check_dataframe_quality(cleaned)
 
+        # Cleanup
+        shutil.rmtree('tmp')
+
     def test_classification(self):
-        dp = DataProcessing('target', mode='classification', folder='tmp/')
+        dp = DataProcessing('target', folder='tmp/')
         cleaned = dp.clean(self.classification)
+        assert check_dataframe_quality(cleaned)
+
+        # Cleanup
+        shutil.rmtree('tmp')
+
+    def test_standalone(self):
+        dp = DataProcessing()
+        cleaned = dp.clean(self.regression)
         assert check_dataframe_quality(cleaned)

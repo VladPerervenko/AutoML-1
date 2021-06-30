@@ -108,7 +108,7 @@ class RegressionDocumenting(BinaryDocumenting):
         for k, v in self.metrics.items():
             self.ln(self.lh)
             self.cell(w=50, h=self.lh, txt=k, border='R', align='L')
-            self.cell(w=50, h=self.lh, txt='{:.2f} \u00B1 {:.2f} %'.format(v[0], v[1]), border='L', align='C')
+            self.cell(w=50, h=self.lh, txt='{:.2f} \u00B1 {:.2f}'.format(v[0], v[1]), border='L', align='C')
         self.ln(self.lh * 3)
 
     def validation(self):
@@ -118,7 +118,7 @@ class RegressionDocumenting(BinaryDocumenting):
         self.add_h3('Cross Validation Plot')
         x, y = self.get_x(), self.get_y()
         path = self.p.mainDir + 'EDA/Validation/v{}/Cross_Val_{}.png'.format(self.p.version, self.mName)
-        self.image(x=(self.WIDTH - 180) / 2, y=y, w=180, h=90, name=path)
+        self.image(x=(self.WIDTH - 200) / 2, y=y, w=200, h=90, name=path)
         self.add_page()
 
         self.add_h3('Validation Strategy')
