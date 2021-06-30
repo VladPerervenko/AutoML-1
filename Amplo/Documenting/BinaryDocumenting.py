@@ -530,7 +530,7 @@ class BinaryDocumenting(FPDF):
     def score_board(self):
         if not self.check_new_page():
             self.ln(self.lh)
-        scores = self.p.results
+        scores = self.p._sort_results(self.p.results)
         self.ln(self.lh)
         self.add_h2('Model Score Board')
         self.add_text("Not only the {} has been optimized by the AutoML pipeline. In total, {} models where trained. "
