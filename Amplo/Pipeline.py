@@ -778,6 +778,10 @@ class Pipeline:
             if isinstance(params, str):
                 params = Utils.parse_json(params)
 
+        # Printing action
+        if self.verbose > 0:
+            print('[AutoML] Preparing Production files for {}, {}, {}'.format(model, feature_set, params))
+
         # Stacking Warning
         if 'Stacking' in model:
             warnings.warn('Stacking Models not Production Ready, skipping to next best')
