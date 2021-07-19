@@ -22,6 +22,8 @@ def parseModel(module_text):
 
 
 class TestPipeline(unittest.TestCase):
+    # todo test normalizing
+    # todo test dummies
 
     @classmethod
     def setUpClass(cls):
@@ -62,7 +64,7 @@ class TestPipeline(unittest.TestCase):
         c, _ = pipeline.convert_data(self.r_data.drop('target', axis=1))
         x = pipeline.x[pipeline.bestFeatures]
         y = self.r_data['target']
-        assert np.allclose(c.values, x.values)  # x has been manipulated
+        assert np.allclose(c.values, x.values), 'Total miss: {}'.format(np.sum(abs(c.values - x.values) > 1e-3))  # x has been manipulated
         assert np.allclose(y, pipeline.y)       # y mustn't have changed
 
         # Pipeline Prediction
