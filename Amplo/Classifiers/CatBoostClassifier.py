@@ -41,7 +41,7 @@ class CatBoostClassifier:
 
     def fit(self, x, y):
         # Split data
-        train_x, test_x, train_y, test_y = train_test_split(x, y, test_size=0.1)
+        train_x, test_x, train_y, test_y = train_test_split(x, y, stratify=y, test_size=0.1)
 
         # Set Attributes
         self.classes_ = np.unique(y)

@@ -43,7 +43,7 @@ class XGBClassifier:
 
     def fit(self, x, y):
         # Split & Convert data
-        train_x, test_x, train_y, test_y = train_test_split(x, y, test_size=0.1)
+        train_x, test_x, train_y, test_y = train_test_split(x, y, stratify=y, test_size=0.1)
         d_train = self.convert_to_d_matrix(train_x, train_y)
         d_test = self.convert_to_d_matrix(test_x, test_y)
 
