@@ -91,12 +91,15 @@ class OptunaGridSearch:
         elif type(self.model).__name__ == 'CatBoostRegressor':
             return {
                 'n_estimators': trial.suggest_int('n_estimators', 500, 2000),
+                "verbose": 0,
+                "early_stopping_rounds": 100,
+                "od_pval": 1e-5,
                 'loss_function': trial.suggest_categorical('loss', ['MAE', 'RMSE']),
                 'learning_rate': trial.suggest_loguniform('learning_rate', 0.001, 0.5),
                 'l2_leaf_reg': trial.suggest_uniform('l2_leaf_reg', 0, 10),
                 'depth': trial.suggest_int('depth', 3, min(10, int(np.log2(self.samples)))),
                 'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, min(1000, int(self.samples / 10))),
-                'max_leaves': trial.suggest_int('max_leaves', 10, 250),
+                'grow_policy': trial.suggest_categorical('grow_policy', ['SymmetricTree', 'Depthwise', 'Lossguide']),
             }
         elif type(self.model).__name__ == 'GradientBoostingRegressor':
             return {
@@ -132,13 +135,12 @@ class OptunaGridSearch:
             }
         elif type(self.model).__name__ == 'XGBRegressor':
             param = {
-                "objective": trial.suggest_categorical('objective', ['reg:squarederror', 'reg:squaredlogerror',
-                                                                     'reg:logistic']),
+                "objective": trial.suggest_categorical('objective', ['reg:squarederror', 'reg:squaredlogerror']),
                 "eval_metric": "rmse",
                 "booster": trial.suggest_categorical("booster", ["gbtree", "gblinear", "dart"]),
                 "lambda": trial.suggest_loguniform("lambda", 1e-8, 1.0),
                 "alpha": trial.suggest_loguniform("alpha", 1e-8, 1.0),
-                "callbacks": optuna.integration.XGBoostPruningCallback(trial, "validation-logloss"),
+                "callbacks": optuna.integration.XGBoostPruningCallback(trial, "validation-rmse"),
                 'learning_rate': trial.suggest_loguniform('learning_rate', 0.001, 0.5),
             }
             if param["booster"] == "gbtree" or param["booster"] == "dart":
