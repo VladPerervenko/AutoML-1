@@ -7,10 +7,12 @@ import pandas as pd
 from datetime import datetime
 from sklearn.model_selection import KFold
 from sklearn.model_selection import StratifiedKFold
-from sklearn.experimental import enable_hist_gradient_boosting
 from ..Classifiers.CatBoostClassifier import CatBoostClassifier
 from ..Classifiers.XGBClassifier import XGBClassifier
 from ..Classifiers.LGBMClassifier import LGBMClassifier
+from ..Regressors.CatBoostRegressor import CatBoostRegressor
+from ..Regressors.XGBRegressor import XGBRegressor
+from ..Regressors.LGBMRegressor import LGBMRegressor
 from sklearn import linear_model
 from sklearn import ensemble
 from sklearn import svm
@@ -114,20 +116,19 @@ class Modelling:
             # The thorough ones
             if self.samples < 25000:
                 if not self.needsProba:
-                    models.append(linear_model.RidgeClassifier())
                     models.append(svm.SVC(kernel='rbf'))
                 models.append(ensemble.BaggingClassifier())
-                models.append(ensemble.GradientBoostingClassifier())
+                # models.append(ensemble.GradientBoostingClassifier()) == XG Boost
                 models.append(XGBClassifier())
 
             # The efficient ones
             else:
-                if not self.needsProba:
-                    models.append(linear_model.RidgeClassifier())
-                models.append(ensemble.HistGradientBoostingClassifier())
+                # models.append(ensemble.HistGradientBoostingClassifier()) == LGBM
                 models.append(LGBMClassifier())
 
             # And the multifaceted ones
+            if not self.needsProba:
+                models.append(linear_model.RidgeClassifier())
             models.append(CatBoostClassifier())
             models.append(ensemble.RandomForestClassifier())
 
@@ -138,18 +139,18 @@ class Modelling:
                     models.append(linear_model.LinearRegression())
                     models.append(svm.SVR(kernel='rbf'))
                 models.append(ensemble.BaggingRegressor())
-                models.append(ensemble.GradientBoostingRegressor())
-                # todo XG Boost
+                # models.append(ensemble.GradientBoostingRegressor()) == XG Boost
+                models.append(XGBRegressor())
 
             # The efficient ones
             else:
                 if not self.needsProba:
                     models.append(linear_model.LinearRegression())
-                models.append(ensemble.HistGradientBoostingRegressor())
-                # todo LGBM
+                # models.append(ensemble.HistGradientBoostingRegressor()) == LGBM
+                models.append(LGBMRegressor())
 
             # And the multifaceted ones
-            # todo Catboost
+            models.append(CatBoostRegressor())
             models.append(ensemble.RandomForestRegressor())
 
         return models
@@ -160,7 +161,7 @@ class Modelling:
         y = np.array(y).ravel()
 
         # Data
-        print('[Modelling] Splitting data (shuffle=%s, splits=%i, features=%i)' %
+        print('[AutoML] Splitting data (shuffle=%s, splits=%i, features=%i)' %
               (str(self.shuffle), self.cvSplits, len(x[0])))
 
         if self.storeResults and 'Initial_Models.csv' in os.listdir(self.folder):
@@ -216,6 +217,6 @@ class Modelling:
         return self.results
 
     def print_results(self, result):
-        print('[Modelling] {} {}: {:.4f} \u00B1 {:.4f}, training time: {:.1f} s'.format(
+        print('[AutoML] {} {}: {:.4f} \u00B1 {:.4f}, training time: {:.1f} s'.format(
             result['model'].ljust(30), self.objective, result['mean_objective'],
             result['std_objective'], result['mean_time']))
