@@ -65,7 +65,7 @@ class Documenting:
         self.model = model
         self.featureSet = feature_set
         self.prepare_data()
-        print('[Documenting] {} {} {}'.format(self.mName, feature_set, self.p.version))
+        print('[AutoML] {} {} {}'.format(self.mName, feature_set, self.p.version))
 
         # Introduction
         markdown = "# Amplo AutoML Documentation - {} v{}\n\n".format(self.mName, self.p.version)
@@ -195,19 +195,19 @@ class Documenting:
         stds = np.std(cm / totals * 100, axis=0)
 
         # Print Results
-        print('[Documenting] Accuracy:        {:.2f} \u00B1 {:.2f} %'.format(np.mean(accuracy), np.std(accuracy)))
-        print('[Documenting] Precision:       {:.2f} \u00B1 {:.2f} %'.format(np.mean(precision), np.std(precision)))
-        print('[Documenting] Recall:          {:.2f} \u00B1 {:.2f} %'.format(
+        print('[AutoML] Accuracy:        {:.2f} \u00B1 {:.2f} %'.format(np.mean(accuracy), np.std(accuracy)))
+        print('[AutoML] Precision:       {:.2f} \u00B1 {:.2f} %'.format(np.mean(precision), np.std(precision)))
+        print('[AutoML] Recall:          {:.2f} \u00B1 {:.2f} %'.format(
             np.mean(sensitivity), np.std(sensitivity)))
-        print('[Documenting] Specificity:     {:.2f} \u00B1 {:.2f} %'.format(
+        print('[AutoML] Specificity:     {:.2f} \u00B1 {:.2f} %'.format(
             np.mean(specificity), np.std(specificity)))
-        print('[Documenting] F1-score:        {:.2f} \u00B1 {:.2f} %'.format(np.mean(f1_score), np.std(f1_score)))
-        print('[Documenting] Confusion Matrix:')
-        print('[Documenting] Prediction / true |    Faulty    |    Healthy      ')
-        print('[Documenting]       Faulty      | {} |  {}'.format(
+        print('[AutoML] F1-score:        {:.2f} \u00B1 {:.2f} %'.format(np.mean(f1_score), np.std(f1_score)))
+        print('[AutoML] Confusion Matrix:')
+        print('[AutoML] Prediction / true |    Faulty    |    Healthy      ')
+        print('[AutoML]       Faulty      | {} |  {}'.format(
             ('{:.1f} \u00B1 {:.1f} %'.format(means[0, 0], stds[0, 0])).ljust(12),
             ('{:.1f} \u00B1 {:.1f} %'.format(means[0, 1], stds[0, 1])).ljust(12)))
-        print('[Documenting]       Healthy     | {} |  {}'.format(
+        print('[AutoML]       Healthy     | {} |  {}'.format(
             ('{:.1f} \u00B1 {:.1f} %'.format(means[1, 0], stds[1, 0])).ljust(12),
             ('{:.1f} \u00B1 {:.1f} %'.format(means[1, 1], stds[1, 1])).ljust(12)))
 

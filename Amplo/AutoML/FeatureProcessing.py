@@ -313,12 +313,12 @@ class FeatureProcessing:
         """
         # Check if not already executed
         if os.path.exists(self.folder + 'Colinear_v{}.json'.format(self.version)):
-            print('[Features] Loading Colinear features')
+            print('[AutoML] Loading Colinear features')
             self.coLinearFeatures = json.load(open(self.folder + 'Colinear_v{}.json'.format(self.version), 'r'))
 
         # Else run
         else:
-            print('[Features] Analysing colinearity')
+            print('[AutoML] Analysing colinearity')
             nk = len(self.x.keys())
             norm = (self.x - self.x.mean(skipna=True, numeric_only=True)).to_numpy()
             ss = np.sqrt(np.sum(norm ** 2, axis=0))
@@ -336,7 +336,7 @@ class FeatureProcessing:
             json.dump(self.coLinearFeatures, open(self.folder + 'Colinear_v{}.json'.format(self.version), 'w'))
 
         self.originalInput = self.originalInput.drop(self.coLinearFeatures, axis=1)
-        print('[Features] Removed {} Co-Linear features ({:.3f} %% threshold)'.format(
+        print('[AutoML] Removed {} Co-Linear features ({:.3f} %% threshold)'.format(
             len(self.coLinearFeatures), self.informationThreshold))
 
     @staticmethod
@@ -348,14 +348,14 @@ class FeatureProcessing:
                 max([model.score(feature, labels, labels == i) for i in labels.unique()]))
 
     def _add_multi_features_mp(self):
-        print('[Features] Listing Multiplication Features')
+        print('[AutoML] Listing Multiplication Features')
         features = []
         for i, key_a in enumerate(self.originalInput.keys()):
             for j, key_b in enumerate(self.originalInput.keys()):
                 if i >= j:
                     continue
                 features.append((key_a, key_b))
-        print('[Features] Analysing {} Multiplication Features'.format(len(features)))
+        print('[AutoML] Analysing {} Multiplication Features'.format(len(features)))
         scores = dict(process_map(functools.partial(self._static_multiply, self.model, self.x, self.y),
                                   features, max_workers=8, chunksize=min(100, int(len(features) / 8 / 8))))
         self.multiFeatures = self._select_features(scores)
@@ -368,11 +368,11 @@ class FeatureProcessing:
         # Check if not already executed
         if os.path.exists(self.folder + 'crossFeatures_v{}.json'.format(self.version)) and False:
             self.crossFeatures = json.load(open(self.folder + 'crossFeatures_v{}.json'.format(self.version), 'r'))
-            print('[Features] Loaded {} cross features'.format(len(self.crossFeatures)))
+            print('[AutoML] Loaded {} cross features'.format(len(self.crossFeatures)))
 
         # Else, execute
         else:
-            print('[Features] Analysing cross features')
+            print('[AutoML] Analysing cross features')
             scores = {}
             n_keys = len(self.originalInput.keys())
             start_time = time.time()
@@ -427,7 +427,7 @@ class FeatureProcessing:
 
         # Store
         json.dump(self.crossFeatures, open(self.folder + 'crossFeatures_v{}.json'.format(self.version), 'w'))
-        print('[Features] Added {} cross features'.format(len(self.crossFeatures)))
+        print('[AutoML] Added {} cross features'.format(len(self.crossFeatures)))
 
     def _add_trigonometry_features(self):
         """
@@ -436,11 +436,11 @@ class FeatureProcessing:
         # Check if not already executed
         if os.path.exists(self.folder + 'trigoFeatures_v{}.json'.format(self.version)):
             self.trigoFeatures = json.load(open(self.folder + 'trigoFeatures_v{}.json'.format(self.version), 'r'))
-            print('[Features] Loaded {} trigonometric features'.format(len(self.trigoFeatures)))
+            print('[AutoML] Loaded {} trigonometric features'.format(len(self.trigoFeatures)))
 
         # Else, execute
         else:
-            print('[Features] Analysing Trigonometric features')
+            print('[AutoML] Analysing Trigonometric features')
 
             scores = {}
             for key in tqdm(self.originalInput.keys()):
@@ -466,7 +466,7 @@ class FeatureProcessing:
 
         # Store
         json.dump(self.trigoFeatures, open(self.folder + 'trigoFeatures_v{}.json'.format(self.version), 'w'))
-        print('[Features] Added {} trigonometric features'.format(len(self.trigoFeatures)))
+        print('[AutoML] Added {} trigonometric features'.format(len(self.trigoFeatures)))
 
     def _add_additive_features(self):
         """
@@ -475,7 +475,7 @@ class FeatureProcessing:
         # Load if available
         if os.path.exists(self.folder + 'addFeatures_v{}.json'.format(self.version)):
             self.addFeatures = json.load(open(self.folder + 'addFeatures_v{}.json'.format(self.version), 'r'))
-            print('[Features] Loaded {} additive features'.format(len(self.addFeatures)))
+            print('[AutoML] Loaded {} additive features'.format(len(self.addFeatures)))
 
         # Else, execute
         else:
@@ -529,7 +529,7 @@ class FeatureProcessing:
 
         # store
         json.dump(self.addFeatures, open(self.folder + 'addFeatures_v{}.json'.format(self.version), 'w'))
-        print('[Features] Added {} additive features'.format(len(self.addFeatures)))
+        print('[AutoML] Added {} additive features'.format(len(self.addFeatures)))
 
     def _add_inverse_features(self):
         """
@@ -557,7 +557,7 @@ class FeatureProcessing:
 
         # Store
         json.dump(self.inverseFeatures, open(self.folder + 'inverseFeatures_v{}.json'.format(self.version), 'w'))
-        print('[Features] Added {} inverse features.'.format(len(self.inverseFeatures)))
+        print('[AutoML] Added {} inverse features.'.format(len(self.inverseFeatures)))
 
     def _add_k_means_features(self):
         """
@@ -570,7 +570,7 @@ class FeatureProcessing:
             # Load features and cluster size
             self.kMeansFeatures = json.load(open(self.folder + 'K-MeansFeatures_v{}.json'.format(self.version), 'r'))
             k_means_data = pd.read_csv(self.folder + 'KMeans_v{}.csv'.format(self.version))
-            print('[Features] Loaded {} K-Means features'.format(len(self.kMeansFeatures)))
+            print('[AutoML] Loaded {} K-Means features'.format(len(self.kMeansFeatures)))
 
             # Prepare data
             data = copy.copy(self.originalInput)
@@ -587,7 +587,7 @@ class FeatureProcessing:
 
         # If not executed, analyse all
         else:
-            print('[Features] Calculating and Analysing K-Means features')
+            print('[AutoML] Calculating and Analysing K-Means features')
             # Prepare data
             data = copy.copy(self.originalInput)
             means = data.mean()
@@ -621,7 +621,7 @@ class FeatureProcessing:
             centers = centers.append(stds, ignore_index=True)
             centers.to_csv(self.folder + 'KMeans_v{}.csv'.format(self.version), index=False)
             json.dump(self.kMeansFeatures, open(self.folder + 'K-MeansFeatures_v{}.json'.format(self.version), 'w'))
-            print('[Features] Added {} K-Means features ({} clusters)'.format(len(self.kMeansFeatures), clusters))
+            print('[AutoML] Added {} K-Means features ({} clusters)'.format(len(self.kMeansFeatures), clusters))
 
     def _add_diff_features(self):
         """
@@ -630,17 +630,17 @@ class FeatureProcessing:
 
         # Check if we're allowed
         if self.maxDiff == 0:
-            print('[Features] Diff features skipped, max diff = 0')
+            print('[AutoML] Diff features skipped, max diff = 0')
             return
 
         # Check if exist
         if os.path.exists(self.folder + 'diffFeatures_v{}.json'.format(self.version)):
             self.diffFeatures = json.load(open(self.folder + 'diffFeatures_v{}.json'.format(self.version), 'r'))
-            print('[Features] Loaded {} diff features'.format(len(self.diffFeatures)))
+            print('[AutoML] Loaded {} diff features'.format(len(self.diffFeatures)))
 
         # If not exist, execute
         else:
-            print('[Features] Analysing diff features')
+            print('[AutoML] Analysing diff features')
             # Copy data so we can diff without altering original data
             keys = self.originalInput.keys()
             diff_input = copy.copy(self.originalInput)
@@ -656,7 +656,7 @@ class FeatureProcessing:
 
             # Select the valuable features
             self.diffFeatures = self._select_features(scores)
-            print('[Features] Added {} differenced features'.format(len(self.diffFeatures)))
+            print('[AutoML] Added {} differenced features'.format(len(self.diffFeatures)))
 
         # Add Diff Features
         for k in self.diffFeatures:
@@ -673,17 +673,17 @@ class FeatureProcessing:
         """
         # Check if allowed
         if self.maxLags == 0:
-            print('[Features] Lagged features skipped, max lags = 0')
+            print('[AutoML] Lagged features skipped, max lags = 0')
             return
 
         # Check if exists
         if os.path.exists(self.folder + 'laggedFeatures_v{}.json'.format(self.version)):
             self.laggedFeatures = json.load(open(self.folder + 'laggedFeatures_v{}.json'.format(self.version), 'r'))
-            print('[Features] Loaded {} lagged features'.format(len(self.laggedFeatures)))
+            print('[AutoML] Loaded {} lagged features'.format(len(self.laggedFeatures)))
 
         # Else execute
         else:
-            print('[Features] Analysing lagged features')
+            print('[AutoML] Analysing lagged features')
             keys = self.originalInput.keys()
             scores = {}
             for lag in tqdm(range(1, self.maxLags)):
@@ -694,7 +694,7 @@ class FeatureProcessing:
 
             # Select
             self.laggedFeatures = self._select_features(scores)
-            print('[Features] Added {} lagged features'.format(len(self.laggedFeatures)))
+            print('[AutoML] Added {} lagged features'.format(len(self.laggedFeatures)))
 
         # Add selected
         for k in self.laggedFeatures:
@@ -709,12 +709,12 @@ class FeatureProcessing:
         Calculates the Predictive Power Score (https://github.com/8080labs/ppscore)
         Assymmetric correlation based on single decision trees trained on 5.000 samples with 4-Fold validation.
         """
-        print('[Features] Determining features with PPS')
+        print('[AutoML] Determining features with PPS')
         data = self.x.copy()
         data['target'] = self.y.copy()
         pp_score = ppscore.predictors(data, "target")
         pp_cols = pp_score['x'][pp_score['ppscore'] != 0].to_list()
-        print('[Features] Selected {} features with Predictive Power Score'.format(len(pp_cols)))
+        print('[AutoML] Selected {} features with Predictive Power Score'.format(len(pp_cols)))
         return pp_cols
 
     def _random_forest_importance(self):
@@ -722,7 +722,7 @@ class FeatureProcessing:
         Calculates Feature Importance with Random Forest, aka Mean Decrease in Gini Impurity
         Symmetric correlation based on multiple features and multiple trees ensemble
         """
-        print('[Features] Determining features with RF')
+        print('[AutoML] Determining features with RF')
         if self.mode == 'regression':
             rf = RandomForestRegressor().fit(self.x, self.y)
         elif self.mode == 'classification' or self.mode == 'multiclass':
@@ -737,12 +737,12 @@ class FeatureProcessing:
         threshold = self.x.keys()[ind_keep].to_list()
         ind_keep = [ind[i] for i in range(len(ind)) if fi[i] > sfi / 200]
         increment = self.x.keys()[ind_keep].to_list()
-        print('[Features] Selected {} features with 85% RF threshold'.format(len(threshold)))
-        print('[Features] Selected {} features with 0.5% RF increment'.format(len(increment)))
+        print('[AutoML] Selected {} features with 85% RF threshold'.format(len(threshold)))
+        print('[AutoML] Selected {} features with 0.5% RF increment'.format(len(increment)))
         return threshold, increment
 
     def _borutapy(self):
-        print('[Features] Determining features with Boruta')
+        print('[AutoML] Determining features with Boruta')
         rf = None
         if self.mode == 'regression':
             rf = RandomForestRegressor()
@@ -751,5 +751,5 @@ class FeatureProcessing:
         selector = BorutaPy(rf, n_estimators='auto', verbose=0)
         selector.fit(self.x.to_numpy(), self.y.to_numpy())
         bp_cols = self.x.keys()[selector.support_].to_list()
-        print('[Features] Selected {} features with Boruta'.format(len(bp_cols)))
+        print('[AutoML] Selected {} features with Boruta'.format(len(bp_cols)))
         return bp_cols

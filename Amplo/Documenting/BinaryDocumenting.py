@@ -181,19 +181,19 @@ class BinaryDocumenting(FPDF):
         }
 
         # Print Results
-        print('[Documenting] Accuracy:        {:.2f} \u00B1 {:.2f} %'.format(np.mean(accuracy), np.std(accuracy)))
-        print('[Documenting] Precision:       {:.2f} \u00B1 {:.2f} %'.format(np.mean(precision), np.std(precision)))
-        print('[Documenting] Recall:          {:.2f} \u00B1 {:.2f} %'.format(
+        print('[AutoML] Accuracy:        {:.2f} \u00B1 {:.2f} %'.format(np.mean(accuracy), np.std(accuracy)))
+        print('[AutoML] Precision:       {:.2f} \u00B1 {:.2f} %'.format(np.mean(precision), np.std(precision)))
+        print('[AutoML] Recall:          {:.2f} \u00B1 {:.2f} %'.format(
             np.mean(sensitivity), np.std(sensitivity)))
-        print('[Documenting] Specificity:     {:.2f} \u00B1 {:.2f} %'.format(
+        print('[AutoML] Specificity:     {:.2f} \u00B1 {:.2f} %'.format(
             np.mean(specificity), np.std(specificity)))
-        print('[Documenting] F1-score:        {:.2f} \u00B1 {:.2f} %'.format(np.mean(f1_score), np.std(f1_score)))
-        print('[Documenting] Confusion Matrix:')
-        print('[Documenting] Prediction / true |    Faulty    |    Healthy      ')
-        print('[Documenting]       Faulty      | {} |  {}'.format(
+        print('[AutoML] F1-score:        {:.2f} \u00B1 {:.2f} %'.format(np.mean(f1_score), np.std(f1_score)))
+        print('[AutoML] Confusion Matrix:')
+        print('[AutoML] Prediction / true |    Faulty    |    Healthy      ')
+        print('[AutoML]       Faulty      | {} |  {}'.format(
             ('{:.1f} \u00B1 {:.1f} %'.format(means[0, 0], stds[0, 0])).ljust(12),
             ('{:.1f} \u00B1 {:.1f} %'.format(means[0, 1], stds[0, 1])).ljust(12)))
-        print('[Documenting]       Healthy     | {} |  {}'.format(
+        print('[AutoML]       Healthy     | {} |  {}'.format(
             ('{:.1f} \u00B1 {:.1f} %'.format(means[1, 0], stds[1, 0])).ljust(12),
             ('{:.1f} \u00B1 {:.1f} %'.format(means[1, 1], stds[1, 1])).ljust(12)))
 
@@ -473,9 +473,9 @@ class BinaryDocumenting(FPDF):
         self.add_h3('Feature Extraction')
         self.add_text('First, features that are co-linear (a * x = y) up to {} % were removed. This resulted in {} '
                       'removed features: {}{}'.format(
-                        self.p.informationThreshold * 100, len(features['Co-Linear Features']),
-                        ', '.join([i for i in features['Co-Linear Features'][:20]]),
-                        ', ...' if len(features['Co-Linear Features']) > 20 else ' ', ))
+            self.p.informationThreshold * 100, len(features['Co-Linear Features']),
+            ', '.join([i for i in features['Co-Linear Features'][:20]]),
+            ', ...' if len(features['Co-Linear Features']) > 20 else ' ', ))
         self.check_new_page(margin=220)
         self.add_text('Subsequently, the features were manipulated and analysed to extract additional information. All '
                       'promising combinations are analysed with a single shallow decision tree.')
@@ -534,8 +534,8 @@ class BinaryDocumenting(FPDF):
         self.ln(self.lh)
         self.add_h2('Model Score Board')
         self.add_text("Not only the {} has been optimized by the AutoML pipeline. In total, {} models where trained. "
-                      "The following table shows the performance of the top 10 performing models:".format(
-            self.mName, len(self.p.results)))
+                      "The following table shows the performance of the top 10 performing models:"
+                      .format(self.mName, len(self.p.results)))
         self.ln(self.lh)
         # Table
         self.set_font('Helvetica', 'B', 12)

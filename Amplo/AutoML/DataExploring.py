@@ -153,22 +153,22 @@ class DataExploring:
 
     def run(self):
         # Run all functions
-        print('[EDA] Generating Missing Values Plot')
+        print('[AutoML] Generating Missing Values Plot')
         self.missing_values()
-        print('[EDA] Generating Time plots')
+        print('[AutoML] Generating Time plots')
         self.time_plots()
-        print('[EDA] Generating Box plots')
+        print('[AutoML] Generating Box plots')
         self.box_plots()
-        print('[EDA] Generating Co-linearity Plots')
+        print('[AutoML] Generating Co-linearity Plots')
         self.co_linearity()
 
         # Functions which require output
         if self.Y is not None:
-            print('[EDA] Generating SHAP plot')
+            print('[AutoML] Generating SHAP plot')
             self.shap()
-            print('[EDA] Generating Feature Ranking Plot')
+            print('[AutoML] Generating Feature Ranking Plot')
             self.feature_ranking()
-            print('[EDA] Predictive Power Score Plot')
+            print('[AutoML] Predictive Power Score Plot')
             self.predictive_power_score()
 
         # Mode specific functions
@@ -182,18 +182,18 @@ class DataExploring:
 
     def _run_regression(self):
         if self.plotSeasonality:
-            print('[EDA] Generating Seasonality Plots')
+            print('[AutoML] Generating Seasonality Plots')
             self.seasonality()
-        print('[EDA] Generating Diff Var Plot')
+        print('[AutoML] Generating Diff Var Plot')
         self.differencing()
-        print('[EDA] Generating ACF Plots')
+        print('[AutoML] Generating ACF Plots')
         self.complete_auto_corr()
-        print('[EDA] Generating PACF Plots')
+        print('[AutoML] Generating PACF Plots')
         self.partial_auto_corr()
         if self.Y is not None:
-            print('[EDA] Generating CCF Plots')
+            print('[AutoML] Generating CCF Plots')
             self.cross_corr()
-            print('[EDA] Generating Scatter plots')
+            print('[AutoML] Generating Scatter plots')
             self.scatters()
 
     def missing_values(self):
