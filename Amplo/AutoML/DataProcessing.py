@@ -1,5 +1,6 @@
 import re
 import os
+import warnings
 import inspect
 import textwrap
 import numpy as np
@@ -78,6 +79,7 @@ class DataProcessing:
         self.z_score_threshold = z_score_threshold
 
         # Info for Documenting
+        self.dummies = {}
         self.removedDuplicateRows = 0
         self.removedDuplicateColumns = 0
         self.removedOutliers = 0
@@ -85,7 +87,7 @@ class DataProcessing:
         self.removedConstantColumns = 0
 
     def clean(self, data):
-        print('[Data] Data Cleaning Started, ({} x {}) samples'.format(len(data), len(data.keys())))
+        print('[AutoML] Data Cleaning Started, ({} x {}) samples'.format(len(data), len(data.keys())))
 
         # Note down
         rows, columns = len(data), len(data.keys())
@@ -121,7 +123,7 @@ class DataProcessing:
 
         # Finish
         self._store(data)
-        print('[Data] Processing completed, ({} x {}) samples returned'.format(len(data), len(data.keys())))
+        print('[AutoML] Processing completed, ({} x {}) samples returned'.format(len(data), len(data.keys())))
         return data
 
     def convert_data_types(self, data):
@@ -132,11 +134,9 @@ class DataProcessing:
             data.loc[:, key] = pd.to_numeric(data[key], errors='coerce', downcast='float')
         for key in self.cat_cols:
             if key in data.keys():
-                dummies = pd.get_dummies(data[key])
-                for dummy_key in dummies.keys():
-                    dummies = dummies.rename(
-                        columns={dummy_key: key + '_' + re.sub('[^a-z0-9]', '_', str(dummy_key).lower())})
+                dummies = pd.get_dummies(data[key], prefix=key)
                 data = data.drop(key, axis=1).join(dummies)
+            self.dummies[key] = dummies.keys().tolist()
         return data
 
     @staticmethod
@@ -190,6 +190,11 @@ class DataProcessing:
         elif self.missing_values == 'zero':
             data = data.fillna(0)
         elif self.missing_values == 'interpolate':
+            # Not recommended when columns are present with >10% missing values
+            if (data.isna().sum() / len(data) > 0.1).any():
+                warnings.warn('[AutoML] Strongly recommend to NOT use interpolation for features with more than 10% '
+                              'missing values') 
+            # Get all non-date_cols & interpolate
             ik = np.setdiff1d(data.keys().to_list(), self.date_cols)
             data[ik] = data[ik].interpolate(limit_direction='both')
             if data.isna().sum().sum() != 0:
