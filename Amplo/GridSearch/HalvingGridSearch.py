@@ -125,12 +125,15 @@ class HalvingGridSearch:
             }
         elif type(self.model).__name__ == 'CatBoostRegressor':
             return {
+                'verbose': [0],
+                'early_stopping_rounds': [100],
+                'od_pval': [1e-5],
                 'loss_function': ['MAE', 'RMSE'],
                 'learning_rate': loguniform(0.001, 0.5),
                 'l2_leaf_reg': uniform(0, 10),
                 'depth': randint(3, min(10, int(np.log2(self.samples)))),
                 'min_data_in_leaf': randint(1, min(1000, int(self.samples / 10))),
-                'max_leaves': randint(10, 250),
+                'grow_policy': ['SymmetricTree', 'Depthwise', 'Lossguide'],
             }
         elif type(self.model).__name__ == 'XGBRegressor':
             return {
@@ -207,6 +210,9 @@ class HalvingGridSearch:
             }
         elif type(self.model).__name__ == 'CatBoostClassifier':
             return {
+                "verbose": [0],
+                "early_stopping_rounds": [100],
+                "od_pval": [1e-5],
                 'loss_function': ['Logloss' if self.binary else 'MultiClass'],
                 'eval_metric': ['Logloss'],
                 'learning_rate': loguniform(0.001, 0.5),
