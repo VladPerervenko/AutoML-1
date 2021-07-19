@@ -128,14 +128,14 @@ class BaseGridSearch:
             elif type(self.model).__name__ == 'CatBoostRegressor':
                 return {
                     'verbose': [0],
-                    'allow_writing_files': [False],
                     'loss_function': ['MAE', 'RMSE'],
+                    'allow_writing_files': [False],
+                    'early_stopping_rounds': [100],
                     'learning_rate': np.logspace(-5, 0, 5).tolist(),
                     'l2_leaf_reg': np.logspace(-5, 0, 5).tolist(),
-                    'depth': [3, 8, 15],
+                    'depth': [3, 5, 7, 10],
                     'min_data_in_leaf': np.logspace(0, min(3, int(np.log10(100)) - 1), 5).astype('int').tolist(),
-                    'max_leaves': [10, 50, 150, 250],
-                    'early_stopping_rounds': [100],
+                    'grow_policy': ['SymmetricTree', 'Depthwise', 'Lossguide'],
                 }
             elif type(self.model).__name__ == 'XGBRegressor':
                 return {
