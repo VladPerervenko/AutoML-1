@@ -214,6 +214,11 @@ class Pipeline:
                                                   information_threshold=self.informationThreshold,
                                                   folder=self.mainDir + 'Features/', version=self.version)
 
+        # Store Pipeline Settings
+        args = locals()
+        args.pop('self')
+        json.dump(args, open(self.mainDir + 'Settings/Pipeline_v{}.json'.format(self.version), 'w'))
+
     def _set_flags(self):
         if self.plotEDA is None:
             self.plotEDA = Utils.boolean_input('Make all EDA graphs?')
@@ -278,7 +283,7 @@ class Pipeline:
                                 self.mainDir + 'Production/v{}/OutputScaler.pickle'.format(self.version), 'rb'))
 
     def _create_dirs(self):
-        folders = ['', 'EDA', 'Data', 'Features', 'Documentation', 'Production']
+        folders = ['', 'EDA', 'Data', 'Features', 'Documentation', 'Production', 'Settings']
         for folder in folders:
             try:
                 os.makedirs(self.mainDir + folder)
@@ -413,7 +418,7 @@ class Pipeline:
 
         # Check if this version has been modelled
         if self.results is not None and self.version in self.results['version'].values:
-            self.results = self._sort_results(self.results)
+            pass
 
         # Run Modelling
         else:
@@ -735,6 +740,7 @@ class Pipeline:
             models = Modelling(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
             model = models[[i for i in range(len(models)) if type(models[i]).__name__ == model][0]]
 
+        # Checks
         assert feature_set in self.colKeep.keys(), 'Feature Set not available.'
         if os.path.exists(self.mainDir + 'Documentation/v{}/{}_{}.pdf'.format(
                 self.version, type(model).__name__, feature_set)):
@@ -755,8 +761,26 @@ class Pipeline:
         documenting.create(model, feature_set)
 
     def _prepare_production_files(self, model=None, feature_set=None, params=None):
+        """
+        Prepares files necessary to deploy a specific model / feature set combi.
+        - Predict.py
+        - Settings.json
+        - Model.joblib
+        - Pipeline.pickle
+
+        Parameters
+        ----------
+        model [string] : Model file for which to prep production files
+        feature_set [string] : Feature set for which to prep production files
+        params [optional, dict]: Model parameters for which to prep production files, if None, takes best.
+        """
+        # Initialize settings.json
+        settings = {'Normalize': False, 'KMeans': False}
+
+        # Create production folder
         if not os.path.exists(self.mainDir + 'Production/v{}/'.format(self.version)):
             os.mkdir(self.mainDir + 'Production/v{}/'.format(self.version))
+
         # Get sorted results for this data version
         results = self._sort_results(self.results[self.results['version'] == self.version])
 
@@ -801,9 +825,24 @@ class Pipeline:
             # Save
             shutil.copy(self.mainDir + 'Features/Scaler_{}_{}.pickle'.format(feature_set, self.version),
                         self.mainDir + 'Production/v{}/Scaler.pickle'.format(self.version))
+            # To settings
+            scaler = pickle.load(open(self.mainDir + 'Production/v{}/Scaler.pickle'.format(self.version), 'rb'))
+            settings['normalize'] = {
+                'input': {
+                    'features': [k for k in x.keys() if k not in self.dateCols + self.catCols],
+                    'means': scaler.mean_.tolist(),
+                    'stds': scaler.var_.tolist(),
+                }
+            }
             if self.mode == 'regression':
                 shutil.copy(self.mainDir + 'Features/OutputScaler_{}_{}.pickle'.format(feature_set, self.version),
                             self.mainDir + 'Production/v{}/OutputScaler.pickle'.format(self.version))
+                output_scaler = pickle.load(open(self.mainDir + 'Production/v{}/OutputScaler.pickle'
+                                                 .format(self.version), 'rb'))
+                settings['normalize']['output'] = {
+                    'means': output_scaler.mean_.tolist(),
+                    'stds': output_scaler.var_.tolist(),
+                }
 
             # Normalize
             normalize_features = [k for k in self.bestFeatures if k not in self.dateCols + self.catCols]
@@ -821,6 +860,13 @@ class Pipeline:
         if any(['dist__' in key for key in self.bestFeatures]):
             shutil.copy(self.mainDir + 'Features/KMeans_v{}.csv'.format(self.version),
                         self.mainDir + 'Production/v{}/KMeans.csv'.format(self.version))
+            # To settings
+            k_means = pd.read_csv(self.mainDir + 'Production/v{}/KMeans.csv'.format(self.version))
+            settings['k_means'] = {
+                'centers': k_means.iloc[:-2].to_dict(),
+                'means': k_means.iloc[-2].to_dict(),
+                'stds': k_means.iloc[-1].to_dict(),
+            }
 
         # Model
         models = Modelling(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
@@ -843,14 +889,23 @@ class Pipeline:
         if not os.path.exists('{}Documentation/v{}/{}_{}.pdf'.format(self.mainDir, self.version, model, feature_set)):
             self.document(self.bestModel, feature_set)
         shutil.copy('{}Documentation/v{}/{}_{}.pdf'.format(self.mainDir, self.version, model, feature_set),
-                    '{}Production/v{}/{}_{}_v{}.pdf'.format(self.mainDir, self.version, self.device, self.issue,
+                    '{}Production/v{}/Report.pdf'.format(self.mainDir, self.version, self.device, self.issue,
                                                             self.version))
+
+        # Settings
+        settings['model'] = model
+        settings['feature_set'] = feature_set
+        settings['params'] = params
+        settings['features'] = self.bestFeatures
+        settings['dummies'] = self.dataProcessor.dummies
+        settings['pipeline'] = json.load(open(self.mainDir + 'Settings/Pipeline_v{}.json'
+                                              .format(self.version), 'r'))
+        json.dump(settings, open(self.mainDir + 'Production/v{}/Settings.json'.format(self.version), 'w'), indent=4)
 
         # Notify of results
         print('[AutoML] Preparing Production Env Files for {}, feature set {}'.format(model, feature_set))
         print('[AutoML] ', params)
-        print('[AutoML] Model fully fitted.')
-        print('[AutoML] In-sample {}: {:4f}'.format(self.objective, self.scorer(self.bestModel, x, y)))
+        print('[AutoML] Model fully fitted, in-sample {}: {:4f}'.format(self.objective, self.scorer(self.bestModel, x, y)))
         return
 
     def _error_analysis(self):
@@ -949,17 +1004,7 @@ class Pipeline:
         data: the data to predict on
         Now this function has the arg decoding, which allows custom code injection
         """
-        # Check if predict file exists already to increment version
-        if os.path.exists(self.mainDir + 'Production/v{}/Predict.py'.format(self.version)):
-            with open(self.mainDir + 'Production/v{}/Predict.py'.format(self.version), 'r') as f:
-                predict_file = f.read()
-            ind = predict_file.find('self.version = ') + 16
-            old_version = predict_file[ind: predict_file.find("'", ind)]
-            minor_version = int(old_version[old_version.find('.') + 1:])
-            version = old_version[:old_version.find('.') + 1] + str(minor_version + 1)
-        else:
-            version = 'v{}.0'.format(self.version)
-        print('Creating Prediction {}'.format(version))
+        print('Creating Prediction {}'.format(self.version))
         data_process = self.dataProcessor.export_function()
         feature_process = self.featureProcessor.export_function()
         return '''import re
@@ -973,7 +1018,7 @@ import pandas as pd
 class Predict(object):
 
     def __init__(self):
-        self.version = '{}'
+        self.version = 'v{:.0f}'
 
     @staticmethod
     def predict(model, features, data, **args):
@@ -988,7 +1033,7 @@ class Predict(object):
         """
         ###############
         # Custom Code #
-        ###############'''.format(version) + textwrap.indent(custom_code, '        ') \
+        ###############'''.format(self.version) + textwrap.indent(custom_code, '        ') \
                + data_process + feature_process + '''
         ###########
         # Predict #
