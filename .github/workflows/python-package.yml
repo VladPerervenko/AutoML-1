@@ -5,7 +5,7 @@ on:
     types: [created]
 
 env:
-  GITHUB_VERSION = ${{ github.event.release.tag_name }}
+  GITHUB_VERSION: ${{ github.event.release.tag_name }}
 
 jobs:
   deploy:
