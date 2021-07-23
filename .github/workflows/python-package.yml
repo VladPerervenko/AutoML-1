@@ -24,8 +24,12 @@ jobs:
         pip install setuptools wheel twine
     - name: Create init
       run: |
-      echo "from .Pipeline import Pipeline
-      __version__ = '$GITHUB_VERSION'" > Amplo/__init__.py
+        VERSION=$(cat << EOF
+        from .Pipeline import Pipeline
+        __version__ = '$GITHUB_VERSION'
+        EOF
+        )
+        echo $VERSION > Amplo/__init__.py
 
     - name: Build and publish
       env:
