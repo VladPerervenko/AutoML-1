@@ -14,22 +14,19 @@ jobs:
 
     steps:
     - uses: actions/checkout@master
+
     - name: Set up Python
       uses: actions/setup-python@master
       with:
         python-version: '3.x'
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install setuptools wheel twine
+
     - name: Create init
-      run: |
-        VERSION=$(cat << EOF
-        from .Pipeline import Pipeline
-        __version__ = '$GITHUB_VERSION'
-        EOF
-        )
-        echo $VERSION > Amplo/__init__.py
+      run: echo "'$GITHUB_VERSION'" >> Amplo/__init__.py
 
     - name: Build and publish
       env:
