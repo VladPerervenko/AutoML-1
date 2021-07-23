@@ -37,8 +37,6 @@ from .Documenting.RegressionDocumenting import RegressionDocumenting
 
 # noinspection PyUnresolvedReferences
 class Pipeline:
-    # todo integrate minorVersion (also with folder)
-    # todo check whether normalization is beneficial
 
     def __init__(self,
                  target,
@@ -48,7 +46,6 @@ class Pipeline:
                  version=None,
                  mode='regression',
                  objective='r2',
-                 fast_run=False,
 
                  # Data Processing
                  num_cols=None,
@@ -96,6 +93,55 @@ class Pipeline:
                  process_data=True,
                  document_results=True,
                  verbose=1):
+        """
+        Automated Machine Learning Pipeline for tabular data.
+        Designed for predictive maintenance applications, failure identification, failure prediction, condition monitoring, etc.
+
+        Parameters
+        ----------
+        target [str]: Column name of the output/dependent/regressand variable.
+        project [str]: Name of the project (for documentation)
+        device [str]: Name of the device (for documentation)
+        issue [str]: Name of the issue (for documentation)
+        version [str]: Pipeline version (set automatically)
+        mode [str]: 'classification' or 'regression'
+        objective [str]: from sklearn metrics and scoring
+        num_cols [list[str]]: Column names of numerical columns
+        date_cols [list[str]]: Column names of datetime columns
+        cat_cols [list[str]]: Column names of categorical columns
+        missing_values [str]: [DataProcessing] - 'remove', 'interpolate', 'mean' or 'zero'
+        outlier_removal [str]: [DataProcessing] - 'clip', 'boxplot', 'z-score' or 'none'
+        z_score_threshold [int]: [DataProcessing] If outlier_removal = 'z-score', the threshold is adaptable
+        include_output [bool]: Whether to include output in the training data (sensible only with sequencing)
+        max_lags [int]: [FeatureProcessing] Maximum lags for lagged features to analyse
+        max_diff [int]: [FeatureProcessing] Maximum differencing order for differencing features
+        information_threshold : [FeatureProcessing] Threshold for removing co-linear features
+        extract_features [bool]: Whether or not to use FeatureProcessing module
+        feature_timeout [int]: [FeatureProcessing] Time budget for feature processing
+        sequence [bool]: [Sequencing] Whether or not to use Sequence module
+        back [int or list[int]]: Input time indices
+        If list -> includes all integers within the list
+        If int -> includes that many samples back
+        forward [int or list[int]: Output time indices
+        If list -> includes all integers within the list.
+        If int -> includes that many samples forward.
+        shift [int]: Shift input / output samples in time
+        diff [int]:  Difference the input & output, 'none', 'diff' or 'log_diff'
+        normalize [bool]: Whether to normalize input/output data
+        shuffle [bool]: Whether to shuffle the samples during cross-validation
+        cv_splits [int]: How many cross-validation splits to make
+        store_models [bool]: Whether to store all trained model files
+        grid_search_type [str]: Which method to use 'optuna', 'halving', 'base'
+        grid_search_time_budget : Time budget for grid search
+        grid_search_candidates : Parameter evaluation budget for grid search
+        grid_search_iterations : Model evaluation budget for grid search
+        stacking [bool]: Whether to create a stacking model at the end
+        custom_code [str]: Add custom code for the prediction function, useful for production
+        plot_eda [bool]: Whether or not to run Exploratory Data Analysis
+        process_data [bool]: Whether or not to force dataprocessing
+        document_results [bool]: Whether or not to force documenting
+        verbose [int]: Level of verbosity
+        """
         # Production initiation
         self.bestModel = None
         self.bestFeatures = None
@@ -110,7 +156,6 @@ class Pipeline:
         self.target = re.sub('[^a-z0-9]', '_', target.lower())
         self.verbose = verbose
         self.customCode = custom_code
-        self.fastRun = fast_run
         self.project = project
         self.device = device
         self.issue = issue
@@ -130,6 +175,10 @@ class Pipeline:
         assert isinstance(grid_search_type, str), 'Grid Search Type must be string'
         assert grid_search_type.lower() in ['base', 'halving', 'optuna'], 'Grid Search Type must be Base, Halving or ' \
                                                                           'Optuna'
+
+        # Advices
+        if include_output and not sequence:
+            warnings.warn('[AutoML] IMPORTANT: strongly advices to not include output without sequencing.')
 
         # Objective
         if objective is not None:
@@ -314,21 +363,26 @@ class Pipeline:
     def fit(self, data):
         """
         Fit the full autoML pipeline.
+
+        1. Data Processing
+        Cleans all the data. See @DataProcessing
         2. (optional) Exploratory Data Analysis
         Creates a ton of plots which are helpful to improve predictions manually
-        3. Data Processing
-        Cleans all the data. See @DataProcessing
-        4. Feature Processing
+        3. Feature Processing
         Extracts & Selects. See @FeatureProcessing
-        5. Initial Modelling
-        Runs 12 off the shelf models with default parameters for all feature sets
+        4. Initial Modelling
+        Runs various off the shelf models with default parameters for all feature sets
         If Sequencing is enabled, this is where it happens, as here, the feature set is generated.
-        6. Grid Search
+        5. Grid Search
         Optimizes the hyper parameters of the best performing models
-        7. Prepare Production Files
+        6. (optional) Create Stacking model
+        7. (optional) Create documentation
+        8. Prepare Production Files
         Nicely organises all required scripts / files to make a prediction
 
-        @param data: DataFrame including target
+        Parameters
+        ----------
+        data [pd.DataFrame] - Single dataframe with input and output data.
         """
         # Tests
         assert isinstance(data, pd.DataFrame), 'Data must be Pandas'
@@ -478,6 +532,12 @@ class Pipeline:
         There is the option to provide a model & feature_set, but both have to be provided. In this case,
         the model & data set combination will be optimized.
         Implemented types, Base, Halving, Optuna
+
+        Parameters
+        ----------
+        model [Object or str]- (optional) Which model to run grid search for.
+        feature_set [str]- (optional) Which feature set to run grid search for 'rft', 'rfi' or 'pps'
+        parameter_set [dict]- (optional) Parameter grid to optimize over
         """
         assert model is not None and feature_set is not None or model == feature_set, \
             'Model & feature_set need to be either both None or both provided.'
@@ -734,6 +794,11 @@ class Pipeline:
     def document(self, model, feature_set):
         """
         Loads the model and features and initiates the outside Documenting class.
+
+        Parameters
+        ----------
+        model [Object or str]- (optional) Which model to run grid search for.
+        feature_set [str]- (optional) Which feature set to run grid search for 'rft', 'rfi' or 'pps'
         """
         # Get model
         if isinstance(model, str):
@@ -913,6 +978,14 @@ class Pipeline:
         pass
 
     def convert_data(self, data):
+        """
+        Function that uses the same process as the pipeline to clean data.
+        Useful if pipeline is pickled for production
+
+        Parameters
+        ----------
+        data [pd.DataFrame]: Input features
+        """
         # Load files
         folder = 'Production/v{}/'.format(self.version)
         features = self.bestFeatures
@@ -954,7 +1027,10 @@ class Pipeline:
     def predict(self, data):
         """
         Full script to make predictions. Uses 'Production' folder with defined or latest version.
-        @param data: data to do prediction on
+
+        Parameters
+        ----------
+        data [pd.DataFrame]: data to do prediction on
         """
         # Feature Extraction, Selection and Normalization
         if self.verbose > 0:
@@ -977,7 +1053,10 @@ class Pipeline:
     def predict_proba(self, data):
         """
         Returns probabilistic prediction, only for classification.
-        @param data: data to do prediction on
+
+        Parameters
+        ----------
+        data [pd.DataFrame]: data to do prediction on
         """
         # Tests
         assert self.mode == 'classification', 'Predict_proba only available for classification'
@@ -996,13 +1075,17 @@ class Pipeline:
 
     def create_predict_function(self, custom_code):
         """
-        This function returns a string, which can be used to make predictions.
+        This function returns a string containing a full python script to make predictions.
         This is in a predefined format, a Predict class, with a predict function taking the arguments
-        model: trained sklearn-like class with the .fit() function
-        features: list of strings containing all features fed to the model
-        scaler: trained sklearn-like class with .transform function
-        data: the data to predict on
+        model [Object]: trained sklearn-like class with the .fit() function
+        features [list[str]]: list of strings containing all features fed to the model
+        scaler [sklearn.preprocessing.StandardScaler]: For normalization
+        data [pd.DataFrame]: Input data to predict for
         Now this function has the arg decoding, which allows custom code injection
+
+        Parameters
+        ----------
+        custom_code [str]: Custom code
         """
         print('Creating Prediction {}'.format(self.version))
         data_process = self.dataProcessor.export_function()
