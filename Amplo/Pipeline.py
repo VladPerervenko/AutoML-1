@@ -11,6 +11,7 @@ import warnings
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from typing import Union
 from datetime import datetime
 
 from sklearn import metrics
@@ -22,6 +23,7 @@ from . import Utils
 
 from .AutoML.Sequence import Sequence
 from .AutoML.Modelling import Modelling
+from .AutoML.DataSampler import DataSampler
 from .AutoML.DataExploring import DataExploring
 from .AutoML.DataProcessing import DataProcessing
 from .AutoML.FeatureProcessing import FeatureProcessing
@@ -35,67 +37,64 @@ from .Documenting.BinaryDocumenting import BinaryDocumenting
 from .Documenting.RegressionDocumenting import RegressionDocumenting
 
 
-# noinspection PyUnresolvedReferences
 class Pipeline:
 
     def __init__(self,
-                 target,
-                 project='',
-                 device='',
-                 issue='',
-                 version=None,
-                 mode='regression',
-                 objective='r2',
+                 target: str,
+                 name: str = '',
+                 version: str = None,
+                 mode: str = 'regression',
+                 objective: str = 'r2',
 
                  # Data Processing
-                 num_cols=None,
-                 date_cols=None,
-                 cat_cols=None,
-                 missing_values='interpolate',
-                 outlier_removal='clip',
-                 z_score_threshold=4,
-                 include_output=False,
+                 num_cols: list = None,
+                 date_cols: list = None,
+                 cat_cols: list = None,
+                 missing_values: str = 'interpolate',
+                 outlier_removal: str = 'clip',
+                 z_score_threshold: int = 4,
+                 include_output: bool = False,
 
                  # Feature Processing
-                 max_lags=10,
-                 max_diff=2,
-                 information_threshold=0.99,
-                 extract_features=True,
-                 feature_timeout=3600,
+                 max_lags: int = 10,
+                 max_diff: int = 2,
+                 information_threshold: float = 0.99,
+                 extract_features: bool = True,
+                 feature_timeout: int = 3600,
 
                  # Sequencing
-                 sequence=False,
-                 back=0,
-                 forward=0,
-                 shift=0,
-                 diff='none',
+                 sequence: bool = False,
+                 back: Union[int, list] = 0,
+                 forward: Union[int, list] = 0,
+                 shift: Union[int, list] = 0,
+                 diff: str = 'none',
 
                  # Initial Modelling
-                 normalize=False,
-                 shuffle=True,
-                 cv_splits=3,
-                 store_models=False,
+                 normalize: bool = False,
+                 shuffle: bool = True,
+                 cv_splits: int = 3,
+                 store_models: bool = False,
 
                  # Grid Search
-                 grid_search_type='optuna',
-                 grid_search_time_budget=3600,
-                 grid_search_candidates=250,
-                 grid_search_iterations=3,
+                 grid_search_type: str = 'optuna',
+                 grid_search_time_budget: int = 3600,
+                 grid_search_candidates: int = 250,
+                 grid_search_iterations: int = 3,
 
                  # Stacking
-                 stacking=False,
+                 stacking: bool = False,
 
                  # Production
-                 custom_code='',
-
+                 custom_code: str = '',
                  # Flags
-                 plot_eda=True,
-                 process_data=True,
-                 document_results=True,
-                 verbose=1):
+                 plot_eda: bool = True,
+                 process_data: bool = True,
+                 document_results: bool = True,
+                 verbose: int = 1):
         """
         Automated Machine Learning Pipeline for tabular data.
-        Designed for predictive maintenance applications, failure identification, failure prediction, condition monitoring, etc.
+        Designed for predictive maintenance applications, failure identification, failure prediction, condition
+        monitoring, etc.
 
         Parameters
         ----------
@@ -138,7 +137,7 @@ class Pipeline:
         stacking [bool]: Whether to create a stacking model at the end
         custom_code [str]: Add custom code for the prediction function, useful for production
         plot_eda [bool]: Whether or not to run Exploratory Data Analysis
-        process_data [bool]: Whether or not to force dataprocessing
+        process_data [bool]: Whether or not to force data processing
         document_results [bool]: Whether or not to force documenting
         verbose [int]: Level of verbosity
         """
@@ -149,30 +148,20 @@ class Pipeline:
         self.bestOutputScaler = None
 
         # Starting
-        print('\n\n*** Starting Amplo AutoML - {} ***\n\n'.format(project))
+        print('\n\n*** Starting Amplo AutoML - {} ***\n\n'.format(name))
 
         # Parsing input
         self.mainDir = 'AutoML/'
         self.target = re.sub('[^a-z0-9]', '_', target.lower())
         self.verbose = verbose
         self.customCode = custom_code
-        self.project = project
-        self.device = device
-        self.issue = issue
+        self.name = name
 
         # Checks
         assert mode == 'regression' or mode == 'classification', 'Supported modes: regression, classification.'
-        assert isinstance(target, str), 'Target needs to be of type string, key of target'
-        assert isinstance(project, str), 'Project is a name, needs to be of type string'
-        assert isinstance(num_cols, list) or num_cols is None, 'Num cols must be a list of strings'
-        assert isinstance(date_cols, list) or date_cols is None, 'Date cols must be a list of strings'
-        assert isinstance(cat_cols, list) or cat_cols is None, 'Cat Cols must be a list of strings'
-        assert isinstance(shift, int), 'Shift needs to be an integer'
-        assert isinstance(max_diff, int), 'max_diff needs to be an integer'
         assert max_lags < 50, 'Max_lags too big. Max 50.'
         assert 0 < information_threshold < 1, 'Information threshold needs to be within [0, 1'
         assert max_diff < 5, 'Max diff too big. Max 5.'
-        assert isinstance(grid_search_type, str), 'Grid Search Type must be string'
         assert grid_search_type.lower() in ['base', 'halving', 'optuna'], 'Grid Search Type must be Base, Halving or ' \
                                                                           'Optuna'
 
@@ -258,6 +247,8 @@ class Pipeline:
                                             cat_cols=self.catCols, missing_values=self.missingValues,
                                             outlier_removal=self.outlierRemoval, z_score_threshold=self.zScoreThreshold,
                                             folder=self.mainDir + 'Data/', version=self.version)
+        self.dataSampler = DataSampler(method='both', margin=0.1, cv_splits=self.cvSplits, shuffle=self.shuffle,
+                                       fast_run=False, objective=self.objective)
         self.featureProcessor = FeatureProcessing(mode=self.mode, max_lags=self.maxLags, max_diff=self.maxDiff,
                                                   extract_features=self.extractFeatures, timeout=self.featureTimeout,
                                                   information_threshold=self.informationThreshold,
@@ -339,11 +330,14 @@ class Pipeline:
             except FileExistsError:
                 continue
 
+    def sort_results(self, results: pd.DataFrame) -> pd.DataFrame:
+        return self._sort_results(results)
+
     @staticmethod
-    def _sort_results(results):
+    def _sort_results(results: pd.DataFrame) -> pd.DataFrame:
         return results.sort_values('worst_case', ascending=False)
 
-    def _get_best_params(self, model, feature_set):
+    def _get_best_params(self, model, feature_set: str) -> dict:
         # Filter results for model and version
         results = self.results[np.logical_and(
             self.results['model'] == type(model).__name__,
@@ -360,7 +354,7 @@ class Pipeline:
         # Parse & return best parameters (regardless of if it's optimized)
         return Utils.parse_json(results.iloc[0]['params'])
 
-    def fit(self, data):
+    def fit(self, data: pd.DataFrame):
         """
         Fit the full autoML pipeline.
 
@@ -385,7 +379,6 @@ class Pipeline:
         data [pd.DataFrame] - Single dataframe with input and output data.
         """
         # Tests
-        assert isinstance(data, pd.DataFrame), 'Data must be Pandas'
         assert len(data) > 0, 'Dataframe has length zero'
         assert self.target in Utils.clean_keys(data).keys(), 'Target missing in data'
 
@@ -410,7 +403,7 @@ class Pipeline:
                                 version=self.version)
             eda.run()
 
-    def _data_processing(self, data):
+    def _data_processing(self, data: pd.DataFrame):
         # Load if possible
         if os.path.exists(self.mainDir + 'Data/Cleaned_v{}.csv'.format(self.version)):
             print('[AutoML] Loading Cleaned Data')
@@ -526,7 +519,7 @@ class Pipeline:
             # Save results
             self.results.to_csv(self.mainDir + 'Results.csv', index=False)
 
-    def grid_search(self, model=None, feature_set=None, parameter_set=None):
+    def grid_search(self, model=None, feature_set: str = None, parameter_set: str = None):
         """
         Runs a grid search. By default, takes the self.results, and runs for the top 3 optimizations.
         There is the option to provide a model & feature_set, but both have to be provided. In this case,
@@ -626,7 +619,7 @@ class Pipeline:
             if self.documentResults:
                 self.document(model.set_params(**params), feature_set)
 
-    def _grid_search_iteration(self, model, parameter_set, feature_set):
+    def _grid_search_iteration(self, model, parameter_set: str, feature_set: str):
         """
         INTERNAL | Grid search for defined model, parameter set and feature set.
         """
@@ -659,9 +652,9 @@ class Pipeline:
                                          verbose=self.verbose)
         elif self.gridSearchType == 'halving':
             grid_search = HalvingGridSearch(model, params=parameter_set, cv=cv, scoring=self.objective,
-                                            candidates=self.candidates, verbose=self.verbose)
+                                            candidates=self.gridSearchCandidates, verbose=self.verbose)
         elif self.gridSearchType == 'optuna':
-            grid_search = OptunaGridSearch(model, params=parameter_set, timeout=self.gridSearchTimeout, cv=cv,
+            grid_search = OptunaGridSearch(model, timeout=self.gridSearchTimeout, cv=cv,
                                            candidates=self.gridSearchCandidates, scoring=self.objective,
                                            verbose=self.verbose)
         else:
@@ -734,7 +727,7 @@ class Pipeline:
                 # Solver
                 solver = 'lfbgs'  # Default for smaller datasets
                 if self.x.shape[0] > 10000 or self.x.shape[1] > 100:
-                    solver = 'sag'      # More efficient for larger datasets
+                    solver = 'sag'  # More efficient for larger datasets
                 level_one = linear_model.LogisticRegression(max_iter=2000, solver=solver)
                 stack = ensemble.StackingClassifier(stacking_models, final_estimator=level_one)
                 cv = StratifiedKFold(n_splits=self.cvSplits, shuffle=self.shuffle)
@@ -791,7 +784,7 @@ class Pipeline:
             if self.documentResults:
                 self.document(stack, feature_set)
 
-    def document(self, model, feature_set):
+    def document(self, model, feature_set: str):
         """
         Loads the model and features and initiates the outside Documenting class.
 
@@ -823,11 +816,13 @@ class Pipeline:
             documenting = MultiDocumenting(self)
         elif self.mode == 'regression':
             documenting = RegressionDocumenting(self)
+        else:
+            raise ValueError('Unknown mode.')
         documenting.create(model, feature_set)
 
-    def _prepare_production_files(self, model=None, feature_set=None, params=None):
+    def _prepare_production_files(self, model=None, feature_set: str = None, params: dict = None):
         """
-        Prepares files necessary to deploy a specific model / feature set combi.
+        Prepares files necessary to deploy a specific model / feature set combination.
         - Predict.py
         - Settings.json
         - Model.joblib
@@ -954,8 +949,7 @@ class Pipeline:
         if not os.path.exists('{}Documentation/v{}/{}_{}.pdf'.format(self.mainDir, self.version, model, feature_set)):
             self.document(self.bestModel, feature_set)
         shutil.copy('{}Documentation/v{}/{}_{}.pdf'.format(self.mainDir, self.version, model, feature_set),
-                    '{}Production/v{}/Report.pdf'.format(self.mainDir, self.version, self.device, self.issue,
-                                                            self.version))
+                    '{}Production/v{}/Report.pdf'.format(self.mainDir, self.version))
 
         # Settings
         settings['model'] = model
@@ -970,14 +964,15 @@ class Pipeline:
         # Notify of results
         print('[AutoML] Preparing Production Env Files for {}, feature set {}'.format(model, feature_set))
         print('[AutoML] ', params)
-        print('[AutoML] Model fully fitted, in-sample {}: {:4f}'.format(self.objective, self.scorer(self.bestModel, x, y)))
+        print('[AutoML] Model fully fitted, in-sample {}: {:4f}'.format(self.objective,
+                                                                        self.scorer(self.bestModel, x, y)))
         return
 
     def _error_analysis(self):
         # todo implement
         pass
 
-    def convert_data(self, data):
+    def convert_data(self, data: pd.DataFrame):
         """
         Function that uses the same process as the pipeline to clean data.
         Useful if pipeline is pickled for production
@@ -1024,7 +1019,7 @@ class Pipeline:
         # Return
         return x, y
 
-    def predict(self, data):
+    def predict(self, data: pd.DataFrame):
         """
         Full script to make predictions. Uses 'Production' folder with defined or latest version.
 
@@ -1050,7 +1045,7 @@ class Pipeline:
 
         return predictions
 
-    def predict_proba(self, data):
+    def predict_proba(self, data: pd.DataFrame):
         """
         Returns probabilistic prediction, only for classification.
 
@@ -1073,7 +1068,7 @@ class Pipeline:
         # Predict
         return self.bestModel.predict_proba(x)
 
-    def create_predict_function(self, custom_code):
+    def create_predict_function(self, custom_code: str):
         """
         This function returns a string containing a full python script to make predictions.
         This is in a predefined format, a Predict class, with a predict function taking the arguments
