@@ -71,6 +71,12 @@ Included Feature Selection algorithms:
 - Predictive Power Score
 - Boruta
 
+## Sequencing
+`from Amplo.AutoML import Sequence`
+For timeseries regression problems, it is often useful to include multiple previous samples instead of just the latest. 
+This class sequences the data, based on which time steps you want included in the in- and output. 
+This is also very useful when working with tensors, as a tensor can be returned which directly fits into a Recurrent Neural Network. 
+
 ## Modelling
 `from Amplo.AutoML import Modelling`
 Runs various regression or classification models.
@@ -86,3 +92,12 @@ Includes:
 
 ## Grid Search
 `from Amplo.GridSearch import *`
+Contains three hyperparameter optimizers, a basic `GridSearch`, an implementation of Scikit's `RandomHalvingSearch` and 
+an implementation of Optuna's Tree-structured Parzen Estimator. Generally we advice to use Optuna.  
+
+## Automatic Documntation
+`from Amplo.AutoML import Documenting`
+Contains a documenter for classification (`binary` and `multiclass` prolems), as well as for regression. 
+Creates a pdf report for a Pipeline, including metrics, data processing steps, and everything else to recreate the result.
+
+
