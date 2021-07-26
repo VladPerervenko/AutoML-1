@@ -12,7 +12,7 @@ from sklearn.metrics import SCORERS
 class OptunaGridSearch:
     # todo remove params from arg
 
-    def __init__(self, model, params=None, cv=KFold(n_splits=3), scoring='accuracy', verbose=0, timeout=3600,
+    def __init__(self, model, cv=KFold(n_splits=3), scoring='accuracy', verbose=0, timeout=3600,
                  candidates=250):
         """
         Wrapper for Optuna Grid Search. Takes any model support by Amplo.AutoML.Modelling.
@@ -21,7 +21,6 @@ class OptunaGridSearch:
         Parameters
         ----------
         model obj: Model object to optimize
-        params : deprecated
         cv obj: Scikit CV object
         scoring str: From Scikits Scorers*
         verbose int: How much to print
@@ -31,7 +30,6 @@ class OptunaGridSearch:
         self.model = model
         if hasattr(model, 'is_fitted'):
             assert not model.is_fitted(), 'Model already fitted'
-        self.params = params
         self.cv = cv
         self.scoring = SCORERS[scoring] if isinstance(scoring, str) else scoring
         self.verbose = verbose
@@ -56,7 +54,7 @@ class OptunaGridSearch:
                 raise ValueError('Model mode unknown')
 
     def get_params(self, trial):
-        # todo support suggest_loguniform
+        # todo support suggest log uniform
         if type(self.model).__name__ == 'LinearRegression':
             return {}
         elif type(self.model).__name__ == 'Lasso' or \
@@ -89,18 +87,14 @@ class OptunaGridSearch:
                 'max_features': trial.suggest_uniform('max_features', 0.5, 1),
             }
         elif type(self.model).__name__ == 'CatBoostRegressor':
-            return {
-                'n_estimators': trial.suggest_int('n_estimators', 500, 2000),
-                "verbose": 0,
-                "early_stopping_rounds": 100,
-                "od_pval": 1e-5,
-                'loss_function': trial.suggest_categorical('loss', ['MAE', 'RMSE']),
-                'learning_rate': trial.suggest_loguniform('learning_rate', 0.001, 0.5),
-                'l2_leaf_reg': trial.suggest_uniform('l2_leaf_reg', 0, 10),
-                'depth': trial.suggest_int('depth', 3, min(10, int(np.log2(self.samples)))),
-                'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, min(1000, int(self.samples / 10))),
-                'grow_policy': trial.suggest_categorical('grow_policy', ['SymmetricTree', 'Depthwise', 'Lossguide']),
-            }
+            return dict(n_estimators=trial.suggest_int('n_estimators', 500, 2000), verbose=0, early_stopping_rounds=100,
+                        od_pval=1e-5, loss_function=trial.suggest_categorical('loss', ['MAE', 'RMSE']),
+                        learning_rate=trial.suggest_loguniform('learning_rate', 0.001, 0.5),
+                        l2_leaf_reg=trial.suggest_uniform('l2_leaf_reg', 0, 10),
+                        depth=trial.suggest_int('depth', 3, min(10, int(np.log2(self.samples)))),
+                        min_data_in_leaf=trial.suggest_int('min_data_in_leaf', 1, min(1000, int(self.samples / 10))),
+                        grow_policy=trial.suggest_categorical('grow_policy',
+                                                              ['SymmetricTree', 'Depthwise', 'Lossguide']))
         elif type(self.model).__name__ == 'GradientBoostingRegressor':
             return {
                 'loss': trial.suggest_categorical('loss', ['ls', 'lad', 'huber']),
