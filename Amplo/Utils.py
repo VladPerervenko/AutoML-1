@@ -1,9 +1,10 @@
 import re
 import json
 import pandas as pd
+from typing import Union
 
 
-def boolean_input(question):
+def boolean_input(question: str) -> bool:
     x = input(question + ' [y / n]')
     if x.lower() == 'n' or x.lower() == 'no':
         return False
@@ -14,7 +15,7 @@ def boolean_input(question):
         return boolean_input(question)
 
 
-def clean_keys(data):
+def clean_keys(data: pd.DataFrame) -> pd.DataFrame:
     # Clean Keys
     new_keys = {}
     for key in data.keys():
@@ -26,7 +27,7 @@ def clean_keys(data):
     return data
 
 
-def parse_json(json_string):
+def parse_json(json_string: Union[str, dict]) -> Union[str, dict]:
     if isinstance(json_string, dict):
         return json_string
     else:
@@ -43,8 +44,7 @@ def parse_json(json_string):
             return json_string
 
 
-def check_dataframe_quality(data):
-    assert isinstance(data, pd.DataFrame)
+def check_dataframe_quality(data: pd.DataFrame) -> bool:
     assert not data.isna().any().any()
     assert not data.isnull().any().any()
     assert not (data.dtypes == object).any().any()
