@@ -25,9 +25,7 @@ class BinaryDocumenting(FPDF):
 
         # Args
         self.p = pipeline
-        self.project = pipeline.project
-        self.device = pipeline.device
-        self.issue = pipeline.issue
+        self.name = pipeline.name
 
         # Initiates
         self.model = None
@@ -80,7 +78,7 @@ class BinaryDocumenting(FPDF):
 
         # Create PDF
         self.add_page()
-        self.add_h1('{} - {} - {}'.format(self.project, self.device, self.issue))
+        self.add_h1('{}'.format(self.name))
         self.add_h2('{} - v{}'.format(self.mName, self.p.version))
         self.add_text(self.model_description)
         self.model_performance()
@@ -407,8 +405,8 @@ class BinaryDocumenting(FPDF):
                       "performance is evaluated, it's trained on one part of the data, and test on another. Therefore, "
                       "the model is always test against data it has not yet been trained for. This gives the best "
                       "approximation for real world (out of sample) performance. The current validation strategy used "
-                      "is {}, with {} splits and {} shuffling the data.".format(
-            type(self.cv).__name__, self.p.cvSplits, 'with' if self.p.shuffle else 'without'))
+                      "is {}, with {} splits and {} shuffling the data."
+                      .format(type(self.cv).__name__, self.p.cvSplits, 'with' if self.p.shuffle else 'without'))
         self.ln(self.lh)
 
     def parameters(self):
@@ -472,10 +470,10 @@ class BinaryDocumenting(FPDF):
         # Feature Extraction
         self.add_h3('Feature Extraction')
         self.add_text('First, features that are co-linear (a * x = y) up to {} % were removed. This resulted in {} '
-                      'removed features: {}{}'.format(
-            self.p.informationThreshold * 100, len(features['Co-Linear Features']),
-            ', '.join([i for i in features['Co-Linear Features'][:20]]),
-            ', ...' if len(features['Co-Linear Features']) > 20 else ' ', ))
+                      'removed features: {}{}'
+                      .format(self.p.informationThreshold * 100, len(features['Co-Linear Features']),
+                              ', '.join([i for i in features['Co-Linear Features'][:20]]),
+                              ', ...' if len(features['Co-Linear Features']) > 20 else ' ', ))
         self.check_new_page(margin=220)
         self.add_text('Subsequently, the features were manipulated and analysed to extract additional information. All '
                       'promising combinations are analysed with a single shallow decision tree.')
@@ -517,20 +515,16 @@ class BinaryDocumenting(FPDF):
                       "  1.  Removed {} duplicate columns and {} duplicate rows\n"
                       "  2.  Removed {} outliers with {}\n"
                       "  3.  Imputed {} missing values with {}\n"
-                      "  4.  Removed {} columns with constant values\n".format(
-            self.p.dataProcessor.removedDuplicateColumns,
-            self.p.dataProcessor.removedDuplicateRows,
-            self.p.dataProcessor.removedOutliers,
-            self.p.dataProcessor.outlier_removal,
-            self.p.dataProcessor.imputedMissingValues,
-            self.p.dataProcessor.missing_values,
-            self.p.dataProcessor.removedConstantColumns
-        ))
+                      "  4.  Removed {} columns with constant values\n"
+                      .format(self.p.dataProcessor.removedDuplicateColumns, self.p.dataProcessor.removedDuplicateRows,
+                              self.p.dataProcessor.removedOutliers, self.p.dataProcessor.outlier_removal,
+                              self.p.dataProcessor.imputedMissingValues, self.p.dataProcessor.missing_values,
+                              self.p.dataProcessor.removedConstantColumns))
 
     def score_board(self):
         if not self.check_new_page():
             self.ln(self.lh)
-        scores = self.p._sort_results(self.p.results)
+        scores = self.p.sort_results(self.p.results)
         self.ln(self.lh)
         self.add_h2('Model Score Board')
         self.add_text("Not only the {} has been optimized by the AutoML pipeline. In total, {} models where trained. "
@@ -549,4 +543,3 @@ class BinaryDocumenting(FPDF):
             self.cell(w=70, h=self.lh, txt='{}'.format(scores.iloc[i]['model']), border='R', align="C")
             self.cell(w=70, h=self.lh, txt='{:.4f} \u00B1 {:.4f} %'.format(scores.iloc[i]['mean_objective'],
                                                                            scores.iloc[i]['std_objective']), align='C')
-            # self.cell(w=25, h=self.lh, txt='{}'.format(scores.iloc[i]['params']), border='L', align='L')

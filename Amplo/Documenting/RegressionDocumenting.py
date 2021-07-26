@@ -12,6 +12,7 @@ class RegressionDocumenting(BinaryDocumenting):
 
     def __init__(self, pipeline):
         super().__init__(pipeline)
+        self.y_not_normalized = None
 
     def analyse(self):
         # Cross-Validation Plots
@@ -126,5 +127,5 @@ class RegressionDocumenting(BinaryDocumenting):
                       "performance is evaluated, it's trained on one part of the data, and test on another. Therefore, "
                       "the model is always test against data it has not yet been trained for. This gives the best "
                       "approximation for real world (out of sample) performance. The current validation strategy used "
-                      "is {}, with {} splits and {} shuffling the data.".format(
-            type(self.cv).__name__, self.p.cvSplits, 'with' if self.p.shuffle else 'without'))
+                      "is {}, with {} splits and {} shuffling the data."
+                      .format(type(self.cv).__name__, self.p.cvSplits, 'with' if self.p.shuffle else 'without'))

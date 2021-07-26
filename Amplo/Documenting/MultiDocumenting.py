@@ -20,6 +20,7 @@ class MultiDocumenting(BinaryDocumenting):
         cm = np.zeros((self.p.cvSplits, self.p.n_classes, self.p.n_classes))
 
         # Modelling
+        model = None
         self.cv = StratifiedKFold(n_splits=self.p.cvSplits, shuffle=self.p.shuffle)
         for i, (t, v) in enumerate(self.cv.split(self.x, self.y)):
             xt, xv, yt, yv = self.x[t], self.x[v], self.y[t].reshape((-1)), self.y[v].reshape((-1))
@@ -136,5 +137,5 @@ class MultiDocumenting(BinaryDocumenting):
                       "performance is evaluated, it's trained on one part of the data, and test on another. Therefore, "
                       "the model is always test against data it has not yet been trained for. This gives the best "
                       "approximation for real world (out of sample) performance. The current validation strategy used "
-                      "is {}, with {} splits and {} shuffling the data.".format(
-            type(self.cv).__name__, self.p.cvSplits, 'with' if self.p.shuffle else 'without'))
+                      "is {}, with {} splits and {} shuffling the data."
+                      .format(type(self.cv).__name__, self.p.cvSplits, 'with' if self.p.shuffle else 'without'))
