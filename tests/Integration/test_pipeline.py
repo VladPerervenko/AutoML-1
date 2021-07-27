@@ -62,9 +62,9 @@ class TestPipeline(unittest.TestCase):
 
         # Test data handling
         c, _ = pipeline.convert_data(self.r_data.drop('target', axis=1))
-        x = pipeline.x[pipeline.bestFeatures]
+        x = pipeline.x[pipeline.settings['features']]
         y = self.r_data['target']
-        assert np.allclose(c.values, x.values), 'Total miss: {}'.format(np.sum(abs(c.values - x.values) > 1e-3))  # x has been manipulated
+        assert np.allclose(c.values, x.values), 'Total miss: {}'.format(np.sum(abs(c.values - x.values) > 1e-3))
         assert np.allclose(y, pipeline.y)       # y mustn't have changed
 
         # Pipeline Prediction
@@ -73,15 +73,15 @@ class TestPipeline(unittest.TestCase):
         assert r2_score(self.r_data['target'], prediction) > 0.75
 
         # Pickle Prediction
-        p = pickle.load(open('AutoML/Production/v0/Pipeline.pickle', 'rb'))
+        p = pickle.load(open('AutoML/Production/v1/Pipeline.pickle', 'rb'))
         assert np.allclose(p.predict(self.r_data), prediction)
 
         # Script prediction
-        path = 'AutoML/Production/v0/'
+        path = 'AutoML/Production/v1/'
         model = joblib.load(path + 'Model.joblib')
         features = json.load(open(path + 'Features.json', 'r'))
-        Predict = parseModel(open(path + 'Predict.py', 'r').read())
-        assert np.allclose(Predict().predict(model=model, features=features, data=self.r_data), prediction)
+        predict = parseModel(open(path + 'Predict.py', 'r').read())
+        assert np.allclose(predict().predict(model=model, features=features, data=self.r_data), prediction)
 
         # Cleanup
         shutil.rmtree('AutoML')
@@ -116,15 +116,15 @@ class TestPipeline(unittest.TestCase):
         assert log_loss(self.c_data['target'], prediction) > -1
 
         # Pickle prediction
-        p = pickle.load(open('AutoML/Production/v0/Pipeline.pickle', 'rb'))
+        p = pickle.load(open('AutoML/Production/v1/Pipeline.pickle', 'rb'))
         assert np.allclose(p.predict_proba(self.c_data), prediction)
 
         # Script prediction
-        path = 'AutoML/Production/v0/'
+        path = 'AutoML/Production/v1/'
         model = joblib.load(path + 'Model.joblib')
         features = json.load(open(path + 'Features.json', 'r'))
-        Predict = parseModel(open(path + 'Predict.py', 'r').read())
-        assert np.allclose(Predict().predict(model=model, features=features, data=self.c_data), prediction)
+        predict = parseModel(open(path + 'Predict.py', 'r').read())
+        assert np.allclose(predict().predict(model=model, features=features, data=self.c_data), prediction)
 
         # Cleanup
         shutil.rmtree('AutoML')
