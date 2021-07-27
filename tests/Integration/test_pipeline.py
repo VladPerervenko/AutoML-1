@@ -39,7 +39,7 @@ class TestPipeline(unittest.TestCase):
             shutil.rmtree('AutoML')
 
         pipeline = Pipeline('target',
-                            project='AutoReg',
+                            name='AutoReg',
                             mode='regression',
                             objective='r2',
                             feature_timeout=5,
@@ -90,7 +90,7 @@ class TestPipeline(unittest.TestCase):
         if os.path.exists('AutoML'):
             shutil.rmtree('AutoML')
         pipeline = Pipeline('target',
-                            project='AutoClass',
+                            name='AutoClass',
                             mode='classification',
                             objective='neg_log_loss',
                             feature_timeout=5,

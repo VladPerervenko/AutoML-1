@@ -384,6 +384,7 @@ class Pipeline:
 
         # Execute pipeline
         self._data_processing(data)
+        self._data_sampling()
         self._eda()
         self._feature_processing()
         self._initial_modelling()
@@ -427,6 +428,28 @@ class Pipeline:
                 warnings.warn('More than 50 classes, you may want to reconsider classification mode')
             if set(self.y) != set([i for i in range(len(set(self.y)))]):
                 raise ValueError('Classes should be [0, 1, ...]')
+
+    def _data_sampling(self):
+        # Check if exists
+        if os.path.exists(self.mainDir + 'Data/Balanced_v{}.csv'.format(self.version)):
+            # Load
+            print('[AutoML] Loading Balanced data')
+            data = pd.read_csv(self.mainDir + 'Data/Balanced_v{}.csv'.format(self.version), index_col='index')
+
+            # Split
+            self.y = data[self.target]
+            self.x = data
+            if self.includeOutput is False:
+                self.x = self.x.drop(self.target, axis=1)
+
+        else:
+            # Fit & Resample
+            self.x, self.y = self.dataSampler.fit_resample(self.x, self.y)
+
+            # Store
+            data = copy.copy(self.x)
+            data[self.target] = self.y
+            data.to_csv(self.mainDir + 'Data/Balanced_v{}.csv'.format(self.version), index_label='index')
 
     def _feature_processing(self):
         # Check if exists
