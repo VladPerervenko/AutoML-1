@@ -10,7 +10,6 @@ from sklearn.metrics import SCORERS
 
 
 class OptunaGridSearch:
-    # todo remove params from arg
 
     def __init__(self, model, cv=KFold(n_splits=3), scoring='accuracy', verbose=0, timeout=3600,
                  candidates=250):
@@ -88,7 +87,8 @@ class OptunaGridSearch:
             }
         elif type(self.model).__name__ == 'CatBoostRegressor':
             return dict(n_estimators=trial.suggest_int('n_estimators', 500, 2000), verbose=0, early_stopping_rounds=100,
-                        od_pval=1e-5, loss_function=trial.suggest_categorical('loss', ['MAE', 'RMSE']),
+                        od_pval=1e-5,
+                        loss_function=trial.suggest_categorical('loss_function', ['MAE', 'RMSE']),
                         learning_rate=trial.suggest_loguniform('learning_rate', 0.001, 0.5),
                         l2_leaf_reg=trial.suggest_uniform('l2_leaf_reg', 0, 10),
                         depth=trial.suggest_int('depth', 3, min(10, int(np.log2(self.samples)))),
@@ -129,7 +129,7 @@ class OptunaGridSearch:
             }
         elif type(self.model).__name__ == 'XGBRegressor':
             param = {
-                "objective": trial.suggest_categorical('objective', ['reg:squarederror', 'reg:squaredlogerror']),
+                "objective": 'reg:squarederror',
                 "eval_metric": "rmse",
                 "booster": trial.suggest_categorical("booster", ["gbtree", "gblinear", "dart"]),
                 "lambda": trial.suggest_loguniform("lambda", 1e-8, 1.0),

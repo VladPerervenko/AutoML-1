@@ -1,4 +1,5 @@
 import unittest
+import numpy as np
 import pandas as pd
 from sklearn.datasets import make_classification
 from sklearn.datasets import make_regression
@@ -10,21 +11,91 @@ class TestDataProcessing(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        x, y = make_classification()
-        cls.classification = pd.DataFrame({'target': y})
-        for i in range(x.shape[1]):
-            cls.classification['Feature_{}'.format(i)] = x[:, i]
-        x, y = make_regression()
-        cls.regression = pd.DataFrame({'target': y})
-        for i in range(x.shape[1]):
-            cls.regression['Feature_{}'.format(i)] = x[:, i]
+        pass
 
     def test_regression(self):
-        fp = FeatureProcessing(max_lags=2, mode='regression', folder='tmp/')
-        extract = fp.extract(self.regression.drop('target', axis=1), self.regression['target'])
-        assert check_dataframe_quality(extract)
+        x, y = make_regression()
+        x, y = pd.DataFrame(x), pd.Series(y)
+        fp = FeatureProcessing(max_lags=2, mode='regression')
+        xt, sets = fp.fit_transform(x, y)
 
     def test_classification(self):
-        fp = FeatureProcessing(max_lags=2, mode='classification', folder='tmp/')
-        extract = fp.extract(self.classification.drop('target', axis=1), self.classification['target'])
-        assert check_dataframe_quality(extract)
+        x, y = make_classification()
+        x, y = pd.DataFrame(x), pd.Series(y)
+        fp = FeatureProcessing(max_lags=2, mode='classification')
+        xt, sets = fp.fit_transform(x, y)
+
+    def test_co_linearity(self):
+        y = pd.Series(np.linspace(2, 100, 100))
+        x = pd.DataFrame({'a': np.linspace(-4, 4, 100), 'b': np.linspace(-4, 4, 100)})
+        fp = FeatureProcessing(mode='regression')
+        xt, sets = fp.fit_transform(x, y)
+        assert len(fp.coLinearFeatures) != 0, "Colinear feature not removed"
+
+    def test_multiply_features(self):
+        y = pd.Series(np.linspace(2, 100, 100))
+        b = pd.Series(np.linspace(-4, 4, 100))
+        x = pd.DataFrame({'a': y / b, 'b': b})
+        fp = FeatureProcessing(mode='regression')
+        xt, sets = fp.fit_transform(x, y)
+        assert len(fp.crossFeatures) != 0, "Multiplicative feature not spotted"
+
+    def test_division(self):
+        y = pd.Series(np.linspace(2, 100, 100))
+        b = pd.Series(np.linspace(-4, 4, 100))
+        x = pd.DataFrame({'a': y * b, 'b': b})
+        fp = FeatureProcessing(mode='regression')
+        xt, sets = fp.fit_transform(x, y)
+        assert len(fp.crossFeatures) != 0, "Division feature not spotted"
+
+    def test_trigonometry(self):
+        y = pd.Series(np.sin(np.linspace(0, 100, 100)))
+        x = pd.DataFrame({'a': np.linspace(0, 100, 100)})
+        fp = FeatureProcessing(mode='regression')
+        xt, sets = fp.fit_transform(x, y)
+        assert len(fp.trigonometricFeatures) != 0, "Trigonometric feature not spotted"
+
+    # def test_inverse(self): --> Invariant for decision tree
+    #     y = pd.Series(np.random.randint(1, 100, 100))
+    #     x = pd.DataFrame({'a': 1 / y})
+    #     print(y, x)
+    #     fp = FeatureProcessing(mode='regression')
+    #     xt, sets = fp.fit_transform(x, y)
+    #     assert len(fp.inverseFeatures) != 0, "Inverse feature not spotted"
+
+    def test_lagged(self):
+        y = pd.Series(np.random.randint(0, 100, 100))
+        x = pd.DataFrame({'a': np.roll(y, -5)})
+        fp = FeatureProcessing(mode='regression')
+        xt, sets = fp.fit_transform(x, y)
+        assert len(fp.laggedFeatures) != 0, "Lagged feature not spotted"
+
+    def test_diff(self):
+        y = pd.Series(np.random.randint(1, 100, 100))
+        x = pd.DataFrame({'a': np.cumsum(y)})
+        fp = FeatureProcessing(mode='regression')
+        xt, sets = fp.fit_transform(x, y)
+        assert len(fp.diffFeatures) != 0, "Difference feature not spotted"
+
+    def test_select(self):
+        y = pd.Series(np.linspace(0, 100, 100))
+        x = pd.DataFrame({'a': y, 'b': np.random.randint(0, 100, 100)})
+        fp = FeatureProcessing(mode='regression')
+        xt, sets = fp.fit_transform(x, y)
+        print(sets)
+        assert all([len(i) == 1 for i in sets.values()]), "Random Feature Selected"
+
+    def test_settings(self):
+        y = pd.Series(np.random.randint(1, 100, 100))
+        b = pd.Series(np.linspace(-4, 4, 100))
+        x = pd.DataFrame({'a': np.cumsum(y), 'b': np.roll(y, -5), 'c': y / b, 'd': y * b})
+        fp = FeatureProcessing(mode='regression')
+        xt, sets = fp.fit_transform(x, y)
+        settings = fp.get_settings()
+        fpn = FeatureProcessing(mode='regression')
+        fpn.load_settings(settings)
+        for k, v in sets.items():
+            xtn = fpn.transform(x, k)
+            assert len(v) == len(xtn.keys()), "Incorrect number of keys"
+            assert all(xt[v].keys() == xtn.keys()), 'Keys are not correct'
+            assert np.allclose(xt[v], xtn), 'Transformed data not consistent for {} set'.format(k)

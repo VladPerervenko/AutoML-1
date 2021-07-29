@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 
 
-class Sequence:
+class Sequencer:
     # todo implement fractional differencing
 
     def __init__(self, back=1, forward=1, shift=0, diff='none'):

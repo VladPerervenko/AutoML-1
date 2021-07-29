@@ -4,9 +4,7 @@ import time
 import copy
 import json
 import joblib
-import pickle
 import shutil
-import textwrap
 import warnings
 import numpy as np
 import pandas as pd
@@ -17,16 +15,15 @@ from datetime import datetime
 from sklearn import metrics
 from sklearn.model_selection import KFold
 from sklearn.model_selection import StratifiedKFold
-from sklearn.preprocessing import StandardScaler
 
 from . import Utils
 
-from .AutoML.Sequence import Sequence
-from .AutoML.Modelling import Modelling
+from .AutoML.Sequencer import Sequencer
+from .AutoML.Modeller import Modeller
 from .AutoML.DataSampler import DataSampler
-from .AutoML.DataExploring import DataExploring
-from .AutoML.DataProcessing import DataProcessing
-from .AutoML.FeatureProcessing import FeatureProcessing
+from .AutoML.DataExplorer import DataExplorer
+from .AutoML.DataProcesser import DataProcesser
+from .AutoML.FeatureProcesser import FeatureProcesser
 
 from .GridSearch.BaseGridSearch import BaseGridSearch
 from .GridSearch.HalvingGridSearch import HalvingGridSearch
@@ -40,7 +37,7 @@ from .Documenting.RegressionDocumenting import RegressionDocumenting
 class Pipeline:
 
     def __init__(self,
-                 target: str,
+                 target: str = '',
                  name: str = '',
                  version: str = None,
                  mode: str = 'regression',
@@ -64,13 +61,14 @@ class Pipeline:
 
                  # Sequencing
                  sequence: bool = False,
-                 back: Union[int, list] = 0,
-                 forward: Union[int, list] = 0,
-                 shift: Union[int, list] = 0,
-                 diff: str = 'none',
+                 seq_back: Union[int, list] = 1,
+                 seq_forward: Union[int, list] = 1,
+                 seq_shift: Union[int, list] = 0,
+                 seq_diff: str = 'none',
+                 seq_flat: bool = True,
 
                  # Initial Modelling
-                 normalize: bool = False,
+                 standardize: bool = False,
                  shuffle: bool = True,
                  cv_splits: int = 3,
                  store_models: bool = False,
@@ -126,7 +124,7 @@ class Pipeline:
         If int -> includes that many samples forward.
         shift [int]: Shift input / output samples in time
         diff [int]:  Difference the input & output, 'none', 'diff' or 'log_diff'
-        normalize [bool]: Whether to normalize input/output data
+        standardize [bool]: Whether to standardize input/output data
         shuffle [bool]: Whether to shuffle the samples during cross-validation
         cv_splits [int]: How many cross-validation splits to make
         store_models [bool]: Whether to store all trained model files
@@ -144,9 +142,6 @@ class Pipeline:
         # Production initiation
         self.bestModel = None
         self.settings = None
-
-        # Starting
-        print('\n\n*** Starting Amplo AutoML - {} ***\n\n'.format(name))
 
         # Parsing input
         self.mainDir = 'AutoML/'
@@ -204,13 +199,14 @@ class Pipeline:
 
         # Sequence Params
         self.sequence = sequence
-        self.sequenceBack = back
-        self.sequenceForward = forward
-        self.sequenceShift = shift
-        self.sequenceDiff = diff
+        self.sequenceBack = seq_back
+        self.sequenceForward = seq_forward
+        self.sequenceShift = seq_shift
+        self.sequenceDiff = seq_diff
+        self.sequenceFlat = seq_flat
 
         # Modelling Params
-        self.normalize = normalize
+        self.standardize = standardize
         self.shuffle = shuffle
         self.cvSplits = cv_splits
         self.storeModels = store_models
@@ -227,9 +223,10 @@ class Pipeline:
         # Instance initiating
         self.x = None
         self.y = None
-        self.colKeep = None
+        self.featureSets = None
         self.results = None
         self.n_classes = None
+        self.is_fitted = False
 
         # Flags
         self._set_flags()
@@ -241,16 +238,17 @@ class Pipeline:
         self._load_version()
 
         # Required sub-classes
-        self.dataProcessor = DataProcessing(target=self.target, num_cols=self.numCols, date_cols=self.dateCols,
-                                            cat_cols=self.catCols, missing_values=self.missingValues,
-                                            outlier_removal=self.outlierRemoval, z_score_threshold=self.zScoreThreshold,
-                                            folder=self.mainDir + 'Data/', version=self.version)
+        self.dataProcesser = DataProcesser(target=self.target, num_cols=self.numCols, date_cols=self.dateCols,
+                                           cat_cols=self.catCols, missing_values=self.missingValues,
+                                           outlier_removal=self.outlierRemoval, z_score_threshold=self.zScoreThreshold,
+                                           folder=self.mainDir + 'Data/')
         self.dataSampler = DataSampler(method='both', margin=0.1, cv_splits=self.cvSplits, shuffle=self.shuffle,
                                        fast_run=False, objective=self.objective)
-        self.featureProcessor = FeatureProcessing(mode=self.mode, max_lags=self.maxLags, max_diff=self.maxDiff,
-                                                  extract_features=self.extractFeatures, timeout=self.featureTimeout,
-                                                  information_threshold=self.informationThreshold,
-                                                  folder=self.mainDir + 'Features/', version=self.version)
+        self.dataSequencer = Sequencer(back=self.sequenceBack, forward=self.sequenceForward,
+                                       shift=self.sequenceShift, diff=self.sequenceDiff)
+        self.featureProcesser = FeatureProcesser(mode=self.mode, max_lags=self.maxLags, max_diff=self.maxDiff,
+                                                 extract_features=self.extractFeatures, timeout=self.featureTimeout,
+                                                 information_threshold=self.informationThreshold)
 
         # Store Pipeline Settings
         args = locals()
@@ -266,59 +264,65 @@ class Pipeline:
             self.documentResults = Utils.boolean_input('Validate results?')
 
     def _load_version(self):
-        if self.version is None:
-            versions = os.listdir(self.mainDir + 'Production')
-            # Updates changelog
-            if self.processData:
-                if len(versions) == 0:
-                    if self.verbose > 0:
-                        print('[AutoML] No Production files found. Setting version 0.')
-                    self.version = 1
-                    file = open(self.mainDir + 'changelog.txt', 'w')
-                    file.write('Dataset changelog. \nv0: Initial')
-                    file.close()
-                else:
-                    self.version = len(versions)
+        """
+        Upon start, loads version
+        """
+        # No need if version is set
+        if self.version is not None:
+            return
 
-                    # Check if not already started
-                    with open(self.mainDir + 'changelog.txt', 'r') as f:
-                        changelog = f.read()
+        # Read changelog (if existent)
+        if os.path.exists(self.mainDir + 'changelog.txt'):
+            with open(self.mainDir + 'changelog.txt', 'r') as f:
+                changelog = f.read()
+        else:
+            changelog = ''
 
-                    # Else ask for changelog
-                    if 'v{}'.format(self.version) in changelog:
-                        changelog = changelog[changelog.find('v{}'.format(self.version)):]
-                        changelog = changelog[:max(0, changelog.find('\n'))]
-                    else:
-                        changelog = '\nv{}: '.format(self.version) + input("Data changelog v{}:\n".format(self.version))
-                        file = open(self.mainDir + 'changelog.txt', 'a')
-                        file.write(changelog)
-                        file.close()
-                    if self.verbose > 0:
-                        print('[AutoML] Set version {}'.format(changelog[1:]))
-            else:
-                if len(versions) == 0:
-                    if self.verbose > 0:
-                        print('[AutoML] No Production files found. Starting fresh.')
-                    file = open(self.mainDir + 'changelog.txt', 'w')
-                    file.write('Dataset changelog. \nv0: Initial')
-                    file.close()
-                    self.version = 1
-                else:
-                    self.version = int(len(versions))
-                    with open(self.mainDir + 'changelog.txt', 'r') as f:
-                        changelog = f.read()
-                    changelog = changelog[changelog.find('v{}'.format(self.version)):]
-                    if self.verbose > 0:
-                        print('[AutoML] Loading last version ({})'.format(changelog[:changelog.find('\n')]))
-                    self.bestModel = joblib.load(self.mainDir + 'Production/v{}/Model.joblib'.format(self.version))
-                    self.settings = json.load(open(self.mainDir + 'Production/v{}/Settings.json'.format(self.version),
-                                                   'r'))
-                    if self.normalize:
-                        self.bestScaler = pickle.load(open(
-                            self.mainDir + 'Production/v{}/Scaler.pickle'.format(self.version), 'rb'))
-                        if self.mode == 'regression':
-                            self.bestOutputScaler = pickle.load(open(
-                                self.mainDir + 'Production/v{}/OutputScaler.pickle'.format(self.version), 'rb'))
+        # Find production folders
+        completed_versions = len(os.listdir(self.mainDir + 'Production'))
+        started_versions = len(changelog.split('\n')) - 1
+
+        # For new runs
+        if started_versions == 0:
+            with open(self.mainDir + 'changelog.txt', 'w') as f:
+                f.write('v1: Initial Run')
+            self.version = 1
+
+        # If last run was completed and we start a new
+        elif started_versions == completed_versions and self.processData:
+            self.version = started_versions + 1
+            with open(self.mainDir + 'changelog.txt', 'a') as f:
+                f.write('v{}: {}'.format(self.version, input('Changelog v{}:\n'.format(self.version))))
+
+        # If no new run is started (either continue or rerun)
+        else:
+            self.version = started_versions
+
+    def get_settings(self) -> dict:
+        """
+        Get settings to recreate fitted object.
+        """
+        assert self.is_fitted, "Pipeline not yet fitted."
+        return self.settings
+
+    def load_settings(self, settings: dict, model: object):
+        """
+        Restores a pipeline from settings.
+
+        Parameters
+        ----------
+        settings [dict]: Pipeline settings
+        """
+        # Check whether model is correctly provided
+        assert type(model).__name__ == settings['model']
+
+        # Set parameters
+        self.__init__(**settings['pipeline'])
+        self.settings = settings
+        self.is_fitted = True
+        self.dataProcesser.load_settings(settings['data_processing'])
+        self.featureProcesser.load_settings(settings['feature_processing'])
+        self.bestModel = model
 
     def _create_dirs(self):
         folders = ['', 'EDA', 'Data', 'Features', 'Documentation', 'Production', 'Settings']
@@ -331,38 +335,74 @@ class Pipeline:
     def sort_results(self, results: pd.DataFrame) -> pd.DataFrame:
         return self._sort_results(results)
 
-    def _standardize_input(self, x: pd.DataFrame) -> pd.DataFrame:
+    def _fit_standardize(self, x: pd.DataFrame, y: pd.Series) -> [pd.DataFrame, pd.Series]:
         """
-        Normalizes the input with values from settings.
+        Fits a standardization parameters and returns the transformed data
+        """
+        # Check if existing
+        if os.path.exists(self.mainDir + 'Settings/Standardize_{}.json'.format(self.version)):
+            self.settings['standardize'] = json.load(open(self.mainDir + 'Settings/Standardize_{}.json'
+                                                          .format(self.version), 'r'))
+            return
+
+        # Fit Input
+        cat_cols = [k for lst in self.settings['data_processing']['dummies'].values() for k in lst]
+        features = [k for k in x.keys() if k not in self.dateCols and k not in cat_cols]
+        means_ = x[features].mean(axis=0)
+        stds_ = x[features].std(axis=0)
+        stds_[stds_ == 0] = 1
+        settings = {
+            'input': {
+                'features': features,
+                'means': means_.to_list(),
+                'stds': stds_.to_list(),
+            }
+        }
+
+        # Fit Output
+        if self.mode == 'regression':
+            std = y.std()
+            settings['output'] = {
+                'mean': y.mean(),
+                'std': std if std != 0 else 1,
+            }
+
+        self.settings['standardize'] = settings
+
+    def _transform_standardize(self, x: pd.DataFrame, y: pd.Series) -> [pd.DataFrame, pd.Series]:
+        """
+        Standardizes the input and output with values from settings.
+
         Parameters
         ----------
-        x [pd.DataFrame]: Input dta
-
-        Returns
-        -------
-        x_normalized [pd.DataFrame]
-        """
-        assert self.settings['normalize'], "Normalize settings not found."
-
-        return (x[self.settings['normalize']['input']['features']] -
-                self.settings['normalize']['input']['means']) / self.settings['normalize']['input']['stds']
-
-    def _standardize_output(self, y: pd.Series) -> pd.Series:
-        """
-        Normalizes the output with values from settings.
-        Parameters
-        ----------
+        x [pd.DataFrame]: Input data
         y [pd.Series]: Output data
-
-        Returns
-        -------
-        y_normalized [pd.Series]: Normalized output data
         """
-        assert self.settings['normalize'], "Normalize settings not found."
+        # Input
+        assert self.settings['standardize'], "Standardize settings not found."
 
-        return (y - self.settings['normalize']['output']['means']) / self.settings['normalize']['output']['stds']
+        # Pull from settings
+        features = self.settings['standardize']['input']['features']
+        means = self.settings['standardize']['input']['means']
+        stds = self.settings['standardize']['input']['stds']
 
-    def _inverse_standardize_output(self, y: pd.Series) -> pd.Series:
+        # Filter if not all features are present
+        if len(x.keys()) < len(features):
+            indices = [[i for i, j in enumerate(features) if j == k][0] for k in x.keys()]
+            features = [features[i] for i in indices]
+            means = [means[i] for i in indices]
+            stds = [stds[i] for i in indices]
+
+        # Transform Input
+        x[features] = (x[features] - means) / stds
+
+        # Transform output (only with regression)
+        if self.mode == 'regression':
+            y = (y - self.settings['standardize']['output']['mean']) / self.settings['standardize']['output']['std']
+
+        return x, y
+
+    def _inverse_standardize(self, y: pd.Series) -> pd.Series:
         """
         For predictions, transform them back to application scales.
         Parameters
@@ -373,8 +413,30 @@ class Pipeline:
         -------
         y [pd.Series]: Actual output
         """
-        assert self.settings['normalize'], "Normalize settings not found"
-        return y * self.settings['normalize']['output']['stds'] + self.settings['normalize']['output']['means']
+        assert self.settings['standardize'], "Standardize settings not found"
+        return y * self.settings['standardize']['output']['std'] + self.settings['standardize']['output']['mean']
+
+    def prep_data(self, feature_set: str):
+        """
+        We don't want to store standardized, sequenced data --> why again?
+        """
+        # Copy
+        x, y = copy.deepcopy(self.x), copy.deepcopy(self.y)
+
+        # Standardize
+        if self.standardize:
+            x, y = self._transform_standardize(x, y)
+
+        # Select Features
+        x = x[self.featureSets[feature_set]]
+
+        # Sequence
+        if self.sequence:
+            sequencer = Sequencer(back=self.sequenceBack, forward=self.sequenceForward,
+                                  shift=self.sequenceShift, diff=self.sequenceDiff)
+            x, y = sequencer.convert(x, y)
+
+        return x, y
 
     @staticmethod
     def _sort_results(results: pd.DataFrame) -> pd.DataFrame:
@@ -421,43 +483,94 @@ class Pipeline:
         ----------
         data [pd.DataFrame] - Single dataframe with input and output data.
         """
+        # Starting
+        print('\n\n*** Starting Amplo AutoML - {} ***\n\n'.format(self.name))
+
         # Tests
-        assert len(data) > 0, 'Dataframe has length zero'
+        assert len(data) > 0, 'Data has length zero'
+        assert self.target != '', "Empty target string."
         assert self.target in Utils.clean_keys(data).keys(), 'Target missing in data'
 
-        # Execute pipeline
-        self._data_processing(data)
-        if self.mode == 'classification':
-            self._data_sampling()
+        # Run Exploratory Data Analysis
         self._eda()
+
+        # Preprocess Data
+        self._data_processing(data)
+
+        # Balance data
+        self._data_sampling()
+
+        # Sequence
+        self._sequencing()
+
+        # Extract and select features
         self._feature_processing()
+
+        # Standardize
+        self._standardizing()
+
+        # Run initial models
         self._initial_modelling()
+
+        # Optimize Hyper parameters
         self.grid_search()
+
+        # Create stacking model
         self._create_stacking()
-        if not os.path.exists(self.mainDir + 'Production/v{}/'.format(self.version)) or \
-                len(os.listdir(self.mainDir + 'Production/v{}/'.format(self.version))) == 0:
-            self._prepare_production_files()
-        print('[AutoML] Done :)')
+
+        # Prepare production files
+        self._prepare_production_files()
+
+        self.is_fitted = True
+        print('[AutoML] All done :)')
 
     def _eda(self):
         if self.plotEDA:
             print('[AutoML] Starting Exploratory Data Analysis')
-            eda = DataExploring(self.x, y=self.y,
-                                mode=self.mode,
-                                folder=self.mainDir,
-                                version=self.version)
+            eda = DataExplorer(self.x, y=self.y,
+                               mode=self.mode,
+                               folder=self.mainDir,
+                               version=self.version)
             eda.run()
 
     def _data_processing(self, data: pd.DataFrame):
-        # Load if possible
+        """
+        Organises the data cleaning. Heavy lifting is done in self.dataProcesser, but settings etc. needs
+        to be organised.
+        """
         if os.path.exists(self.mainDir + 'Data/Cleaned_v{}.csv'.format(self.version)):
             print('[AutoML] Loading Cleaned Data')
+
+            # Load data
             data = pd.read_csv(self.mainDir + 'Data/Cleaned_v{}.csv'.format(self.version), index_col='index')
+
+            # Load settings
+            self.settings['data_processing'] = json.load(open(self.mainDir + 'Settings/Cleaning_v{}.json'
+                                                              .format(self.version), 'r'))
+            self.dataProcesser.load_settings(self.settings['data_processing'])
 
         # Clean
         else:
-            print('[AutoML] Cleaning Data')
-            data = self.dataProcessor.clean(data)
+            print('[AutoML] Starting Data Processor')
+
+            # Cleaning
+            data = self.dataProcesser.fit_transform(data)
+
+            # Store data
+            data.to_csv(self.mainDir + 'Data/Cleaned_v{}.csv'.format(self.version), index_label='index')
+
+            # Save settings
+            self.settings['data_processing'] = self.dataProcesser.get_settings()
+            json.dump(self.settings['data_processing'], open(self.mainDir + 'Settings/Cleaning_v{}.json'
+                                                             .format(self.version), 'w'))
+
+        # If no columns were provided, load them from data processor
+        if self.dateCols is None:
+            self.dateCols = self.settings['data_processing']['date_cols']
+        if self.numCols is None:
+            self.dateCols = self.settings['data_processing']['num_cols']
+        if self.catCols is None:
+            self.catCols = self.settings['data_processing']['cat_cols']
 
         # Split and store in memory
         self.y = data[self.target]
@@ -469,52 +582,129 @@ class Pipeline:
         self.n_classes = self.y.nunique()
         if self.mode == 'classification':
             if self.n_classes >= 50:
-                warnings.warn('More than 50 classes, you may want to reconsider classification mode')
+                warnings.warn('More than 20 classes, you may want to reconsider classification mode')
             if set(self.y) != set([i for i in range(len(set(self.y)))]):
                 raise ValueError('Classes should be [0, 1, ...]')
 
     def _data_sampling(self):
-        # Check if exists
-        if os.path.exists(self.mainDir + 'Data/Balanced_v{}.csv'.format(self.version)):
-            # Load
-            print('[AutoML] Loading Balanced data')
-            data = pd.read_csv(self.mainDir + 'Data/Balanced_v{}.csv'.format(self.version), index_col='index')
+        """
+        Only run for classification problems. Balances the data using imblearn.
+        Does not guarantee to return balanced classes. (Methods are data dependent)
+        """
+        # Only necessary for classification
+        if self.mode == 'classification':
+            # Check if exists
+            if os.path.exists(self.mainDir + 'Data/Balanced_v{}.csv'.format(self.version)):
+                # Load
+                print('[AutoML] Loading Balanced data')
+                data = pd.read_csv(self.mainDir + 'Data/Balanced_v{}.csv'.format(self.version), index_col='index')
 
-            # Split
-            self.y = data[self.target]
-            self.x = data
-            if self.includeOutput is False:
-                self.x = self.x.drop(self.target, axis=1)
+                # Split
+                self.y = data[self.target]
+                self.x = data
+                if self.includeOutput is False:
+                    self.x = self.x.drop(self.target, axis=1)
 
-        else:
-            # Fit & Resample
-            self.x, self.y = self.dataSampler.fit_resample(self.x, self.y)
+            else:
+                # Fit & Resample
+                self.x, self.y = self.dataSampler.fit_resample(self.x, self.y)
 
-            # Store
-            data = copy.copy(self.x)
-            data[self.target] = self.y
-            data.to_csv(self.mainDir + 'Data/Balanced_v{}.csv'.format(self.version), index_label='index')
+                # Store
+                data = copy.copy(self.x)
+                data[self.target] = self.y
+                data.to_csv(self.mainDir + 'Data/Balanced_v{}.csv'.format(self.version), index_label='index')
+
+    def _sequencing(self):
+        """
+        Sequences the data. Useful mostly for problems where older samples play a role in future values.
+        The settings of this module are NOT AUTOMATIC
+        """
+        if self.sequence:
+            if os.path.exists(self.mainDir + 'Data/Sequence_v{}.csv'.format(self.version)):
+                print('[AutoML] Loading Sequenced Data')
+
+                # Load data
+                data = pd.read_csv(self.mainDir + 'Data/Sequence_v{}.csv'.format(self.version), index_col='index')
+
+                # Split and set to memory
+                self.y = data[self.target]
+                self.x = data
+                if not self.includeOutput:
+                    self.x = self.x.drop(self.target, axis=1)
+
+            else:
+                print('[AutoML] Sequencing data')
+                self.x, self.y = self.dataSequencer.convert(self.x, self.y)
+
+                # Save
+                data = copy.deepcopy(self.x)
+                data[self.target] = copy.deepcopy(self.y)
+                data.to_csv(self.mainDir + 'Data/Sequence_v{}.csv'.format(self.version), index_label='index')
 
     def _feature_processing(self):
+        """
+        Organises feature processing. Heavy lifting is done in self.featureProcesser, but settings, etc.
+        needs to be organised.
+        """
         # Check if exists
         if os.path.exists(self.mainDir + 'Data/Extracted_v{}.csv'.format(self.version)):
             print('[AutoML] Loading Extracted Features')
+
+            # Loading data
             self.x = pd.read_csv(self.mainDir + 'Data/Extracted_v{}.csv'.format(self.version), index_col='index')
-            self.colKeep = json.load(open(self.mainDir + 'Features/Sets_v{}.json'.format(self.version), 'r'))
+
+            # Loading settings
+            self.settings['feature_processing'] = json.load(open(self.mainDir + 'Settings/Features_v{}.json'
+                                                                 .format(self.version), 'r'))
+            self.featureProcesser.load_settings(self.settings['feature_processing'])
+            self.featureSets = self.settings['feature_processing']['featureSets']
 
         else:
-            # Extract
-            self.x = self.featureProcessor.extract(self.x, self.y)
+            print('[AutoML] Starting Feature Processor')
 
-            # Select
-            self.colKeep = self.featureProcessor.select(self.x, self.y)
+            # Transform data
+            self.x, self.featureSets = self.featureProcesser.fit_transform(self.x, self.y)
 
-            # Store
+            # Store data
             self.x.to_csv(self.mainDir + 'Data/Extracted_v{}.csv'.format(self.version), index_label='index')
 
+            # Save settings
+            self.settings['feature_processing'] = self.featureProcesser.get_settings()
+            json.dump(self.settings['feature_processing'], open(self.mainDir + 'Settings/Features_v{}.json'
+                                                                .format(self.version), 'w'))
+
+    def _standardizing(self):
+        """
+        Wrapper function to determine whether to fit or load
+        """
+        # Return if standardize is off
+        if not self.standardize:
+            return
+
+        # Load if exists
+        if os.path.exists(self.mainDir + 'Settings/Standardize_v{}.json'.format(self.version)):
+            self.settings['standardize'] = json.load(open(self.mainDir + 'Settings/Standardize_v{}.json'
+                                                          .format(self.version), 'r'))
+
+        # Otherwise fits
+        else:
+            self._fit_standardize(self.x, self.y)
+
+            # Store Settings
+            json.dump(self.settings['standardize'], open(self.mainDir + 'Settings/Standardize_v{}.json'
+                                                         .format(self.version), 'w'))
+
+        # And transform
+        self.x, self.y = self._transform_standardize(self.x, self.y)
+
     def _initial_modelling(self):
+        """
+        Runs various models to see which work well.
+        """
         # Load existing results
         if 'Results.csv' in os.listdir(self.mainDir):
+
+            # Load results
             self.results = pd.read_csv(self.mainDir + 'Results.csv')
 
             # Printing here as we load it
@@ -523,7 +713,7 @@ class Pipeline:
                 self.results['type'] == 'Initial modelling'
             )]
             for fs in set(results['dataset']):
-                print('[AutoML] Initial Modelling for {} ({})'.format(fs, len(self.colKeep[fs])))
+                print('[AutoML] Initial Modelling for {} ({})'.format(fs, len(self.featureSets[fs])))
                 fsr = results[results['dataset'] == fs]
                 for i in range(len(fsr)):
                     row = fsr.iloc[i]
@@ -531,57 +721,30 @@ class Pipeline:
                                                                         row['mean_objective'], row['std_objective']))
 
         # Check if this version has been modelled
-        if self.results is not None and self.version in self.results['version'].values:
-            pass
+        if self.results is None or self.version not in self.results['version'].values:
 
-        # Run Modelling
-        else:
-            for feature_set, cols in self.colKeep.items():
+            # Iterate through feature sets
+            for feature_set, cols in self.featureSets.items():
+
                 # Skip empty sets
                 if len(cols) == 0:
                     print('[AutoML] Skipping {} features, empty set'.format(feature_set))
+                    continue
+                print('[AutoML] Initial Modelling for {} features ({})'.format(feature_set, len(cols)))
+
+                # Do the modelling
+                modeller = Modeller(mode=self.mode, shuffle=self.shuffle, store_models=self.storeModels,
+                                    objective=self.objective, dataset=feature_set,
+                                    store_results=False, folder=self.mainDir + 'Models/')
+                results = modeller.fit(self.x[cols], self.y)
+
+                # Add results to memory
+                results['type'] = 'Initial modelling'
+                results['version'] = self.version
+                if self.results is None:
+                    self.results = results
                 else:
-                    print('[AutoML] Initial Modelling for {} features ({})'.format(feature_set, len(cols)))
-
-                    # Select data
-                    x, y = copy.deepcopy(self.x[cols]), copy.deepcopy(self.y)
-
-                    # Normalize Feature Set (Done here to get one normalization file per feature set)
-                    if self.normalize:
-                        normalize_features = [k for k in x.keys() if k not in self.dateCols + self.catCols]
-                        scaler = StandardScaler()
-                        x[normalize_features] = scaler.fit_transform(x[normalize_features])
-                        pickle.dump(scaler,
-                                    open(self.mainDir + 'Features/Scaler_{}_{}.pickle'.format(
-                                        feature_set, self.version), 'wb'))
-                        if self.mode == 'regression':
-                            output_scaler = StandardScaler()
-                            y = pd.Series(output_scaler.fit_transform(y.values.reshape(-1, 1)).reshape(-1),
-                                          name=self.target)
-                            pickle.dump(output_scaler,
-                                        open(self.mainDir + 'Features/OutputScaler_{}_{}.pickle'.format(
-                                            feature_set, self.version),
-                                             'wb'))
-
-                    # Sequence if necessary
-                    if self.sequence:
-                        sequencer = Sequence(back=self.sequenceBack, forward=self.sequenceForward,
-                                             shift=self.sequenceShift, diff=self.sequenceDiff)
-                        x, y = sequencer.convert(x, y)
-
-                    # Do the modelling
-                    modeller = Modelling(mode=self.mode, shuffle=self.shuffle, store_models=self.storeModels,
-                                         objective=self.objective, dataset=feature_set,
-                                         store_results=False, folder=self.mainDir + 'Models/')
-                    results = modeller.fit(x, y)
-
-                    # Add results to memory
-                    results['type'] = 'Initial modelling'
-                    results['version'] = self.version
-                    if self.results is None:
-                        self.results = results
-                    else:
-                        self.results = self.results.append(results)
+                    self.results = self.results.append(results)
 
             # Save results
             self.results.to_csv(self.mainDir + 'Results.csv', index=False)
@@ -606,7 +769,7 @@ class Pipeline:
 
             # Get model string
             if isinstance(model, str):
-                models = Modelling(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
+                models = Modeller(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
                 model = models[[i for i in range(len(models)) if type(models[i]).__name__ == model][0]]
 
             # Organise existing results
@@ -644,7 +807,7 @@ class Pipeline:
             return
 
         # If arguments aren't provided, run through promising models
-        models = Modelling(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
+        models = Modeller(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
         results = self._sort_results(self.results[np.logical_and(
             self.results['type'] == 'Initial modelling',
             self.results['version'] == self.version,
@@ -691,21 +854,7 @@ class Pipeline:
         INTERNAL | Grid search for defined model, parameter set and feature set.
         """
         print('\n[AutoML] Starting Hyper Parameter Optimization for {} on {} features ({} samples, {} features)'.format(
-            type(model).__name__, feature_set, len(self.x), len(self.colKeep[feature_set])))
-
-        # Select data
-        x, y = copy.deepcopy(self.x[self.colKeep[feature_set]]), copy.deepcopy(self.y)
-
-        # Normalize Feature Set (the input remains original)
-        if self.normalize:
-            features_to_normalize = [k for k in self.colKeep[feature_set] if k not in self.dateCols + self.catCols]
-            scaler = pickle.load(
-                open(self.mainDir + 'Features/Scaler_{}_{}.pickle'.format(feature_set, self.version), 'rb'))
-            x[features_to_normalize] = scaler.transform(x[features_to_normalize])
-            if self.mode == 'regression':
-                output_scaler = pickle.load(
-                    open(self.mainDir + 'Features/OutputScaler_{}_{}.pickle'.format(feature_set, self.version), 'rb'))
-                y = pd.Series(output_scaler.transform(y.values.reshape(-1, 1)).reshape(-1), name=self.target)
+            type(model).__name__, feature_set, len(self.x), len(self.featureSets[feature_set])))
 
         # Cross-Validator
         cv = StratifiedKFold(n_splits=self.cvSplits, shuffle=self.shuffle)
@@ -727,7 +876,7 @@ class Pipeline:
         else:
             raise NotImplementedError('Only Base, Halving and Optuna are implemented.')
         # Get results
-        results = grid_search.fit(x, y)
+        results = grid_search.fit(self.x[self.featureSets[feature_set]], self.y)
         return results.sort_values('worst_case', ascending=False)
 
     def _create_stacking(self):
@@ -738,7 +887,6 @@ class Pipeline:
         --> classifiers need predict_proba
         --> level 1 needs to be ordinary least squares
         """
-        # todo normalize data to assure easier convergence
         if self.stacking:
             print('[AutoML] Creating Stacking Ensemble')
             from sklearn import neighbors
@@ -762,7 +910,7 @@ class Pipeline:
             stacking_models_str = results['model'].unique()[:n_stacking_models]
             stacking_models_params = [Utils.parse_json(results.iloc[np.where(results['model'] == sms)[0][0]]['params'])
                                       for sms in stacking_models_str]
-            models = Modelling(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
+            models = Modeller(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
             models_str = [type(m).__name__ for m in models]
             stacking_models = [(sms, models[models_str.index(sms)].set_params(**stacking_models_params[i]))
                                for i, sms in enumerate(stacking_models_str)]
@@ -802,27 +950,8 @@ class Pipeline:
                 raise NotImplementedError('Unknown mode')
             print('[AutoML] Stacked models: {}'.format([type(i[1]).__name__ for i in stacking_models]))
 
-            # Train stack
-            x, y = copy.deepcopy(self.x[self.colKeep[feature_set]]), copy.deepcopy(self.y)
-            if self.normalize:
-                normalize_features = [k for k in x.keys() if k not in self.dateCols + self.catCols]
-                scaler = pickle.load(open(
-                    self.mainDir + 'Features/Scaler_{}_{}.pickle'.format(feature_set, self.version), 'rb'))
-                x[normalize_features] = scaler.fit_transform(x[normalize_features])
-                if self.mode == 'regression':
-                    output_scaler = pickle.load(open(self.mainDir + 'Features/OutputScaler_{}_{}.pickle'.format(
-                        feature_set, self.version), 'rb'))
-                    y = pd.Series(output_scaler.fit_transform(y.values.reshape(-1, 1)).reshape(-1),
-                                  name=self.target)
-            # Sequence if necessary
-            if self.sequence:
-                sequencer = Sequence(back=self.sequenceBack, forward=self.sequenceForward,
-                                     shift=self.sequenceShift, diff=self.sequenceDiff)
-                x, y = sequencer.convert(x, y)
-            if isinstance(x, pd.DataFrame):
-                x, y = x.to_numpy(), y.to_numpy()
-
             # Cross Validate
+            x, y = self.x[self.featureSets[feature_set]].to_numpy(), self.y.to_numpy()
             score = []
             times = []
             for (t, v) in tqdm(cv.split(x, y)):
@@ -862,11 +991,11 @@ class Pipeline:
         """
         # Get model
         if isinstance(model, str):
-            models = Modelling(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
+            models = Modeller(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
             model = models[[i for i in range(len(models)) if type(models[i]).__name__ == model][0]]
 
         # Checks
-        assert feature_set in self.colKeep.keys(), 'Feature Set not available.'
+        assert feature_set in self.featureSets.keys(), 'Feature Set not available.'
         if os.path.exists(self.mainDir + 'Documentation/v{}/{}_{}.pdf'.format(
                 self.version, type(model).__name__, feature_set)):
             print('[AutoML] Documentation existing for {} v{} - {} '.format(
@@ -890,148 +1019,107 @@ class Pipeline:
     def _prepare_production_files(self, model=None, feature_set: str = None, params: dict = None):
         """
         Prepares files necessary to deploy a specific model / feature set combination.
-        - Predict.py
-        - Settings.json
         - Model.joblib
-        - Pipeline.pickle
+        - Settings.json
+        - Report.pdf
 
         Parameters
         ----------
-        model [string] : Model file for which to prep production files
-        feature_set [string] : Feature set for which to prep production files
-        params [optional, dict]: Model parameters for which to prep production files, if None, takes best.
+        model [string] : (optional) Model file for which to prep production files
+        feature_set [string] : (optional) Feature set for which to prep production files
+        params [optional, dict]: (optional) Model parameters for which to prep production files, if None, takes best.
         """
-        # Create production folder
-        if not os.path.exists(self.mainDir + 'Production/v{}/'.format(self.version)):
-            os.mkdir(self.mainDir + 'Production/v{}/'.format(self.version))
+        # Path variable
+        prod_path = self.mainDir + 'Production/v{}/'.format(self.version)
 
-        # Get sorted results for this data version
+        # Create production folder
+        if not os.path.exists(prod_path):
+            os.mkdir(prod_path)
+
+        # Filter results for this version
         results = self._sort_results(self.results[self.results['version'] == self.version])
 
-        # In the case args are provided
-        if model is not None and feature_set is not None:
+        # Filter results if model is provided
+        if model is not None:
             # Take name if model instance is given
             if not isinstance(model, str):
                 model = type(model).__name__
-            if params is None:
-                results = self._sort_results(
-                    results[np.logical_and(results['model'] == model, results['dataset'] == feature_set)])
-                params = Utils.parse_json(results.iloc[0]['params'])
 
-        # Otherwise find best
-        else:
-            model = results.iloc[0]['model']
-            feature_set = results.iloc[0]['dataset']
+            # Filter results
+            results = self._sort_results(results[results['model'] == model])
+
+        # Filter results if feature set is provided
+        if feature_set is not None:
+            results = self._sort_results(results[results['dataset'] == feature_set])
+
+        # Get best parameters
+        if params is None:
             params = results.iloc[0]['params']
-            if isinstance(params, str):
-                params = Utils.parse_json(params)
+
+        # Otherwise Find best
+        model = results.iloc[0]['model']
+        feature_set = results.iloc[0]['dataset']
+        params = Utils.parse_json(params)
+
+        # Update pipeline settings
+        self.settings['model'] = model  # The string
+        self.settings['params'] = params
+        self.settings['feature_set'] = feature_set
+        self.settings['features'] = self.featureSets[feature_set]
 
         # Printing action
         if self.verbose > 0:
             print('[AutoML] Preparing Production files for {}, {}, {}'.format(model, feature_set, params))
 
-        # Stacking Warning
-        if 'Stacking' in model:
-            warnings.warn('Stacking Models not Production Ready, skipping to next best')
-            model = results.iloc[1]['model']
-            feature_set = results.iloc[1]['dataset']
-            params = Utils.parse_json(results.iloc[1]['params'])
+        # Try to load model
+        if os.path.exists(prod_path + 'Model.joblib'):
+            self.bestModel = joblib.load(prod_path + 'Model.joblib')
 
-        # Features
-        features = self.colKeep[feature_set]
-        json.dump(features, open(self.mainDir + 'Production/v{}/Features.json'.format(self.version), 'w'))
-        self.settings['feature_set'] = feature_set
-        self.settings['features'] = features
+        # Rerun if not existent, or different than desired
+        if not os.path.exists(prod_path + 'Model.joblib') or \
+            type(self.bestModel).__name__ != model or \
+                self.bestModel.get_params() != params:
 
-        # Copy data
-        x, y = copy.deepcopy(self.x[features]), copy.deepcopy(self.y)
+            # Stacking Warning
+            if 'Stacking' in model:
+                warnings.warn('Stacking Models not Production Ready, skipping to next best')
+                model = results.iloc[1]['model']
+                feature_set = results.iloc[1]['dataset']
+                params = Utils.parse_json(results.iloc[1]['params'])
 
-        # Save Scaler & Normalize
-        if self.normalize:
-            # Save
-            shutil.copy(self.mainDir + 'Features/Scaler_{}_{}.pickle'.format(feature_set, self.version),
-                        self.mainDir + 'Production/v{}/Scaler.pickle'.format(self.version))
+            # Model
+            models = Modeller(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
+            self.bestModel = [mod for mod in models if type(mod).__name__ == model][0]
+            self.bestModel.set_params(**params)
+            self.bestModel.fit(self.x[self.featureSets[feature_set]], self.y)
+            joblib.dump(self.bestModel, self.mainDir + 'Production/v{}/Model.joblib'.format(self.version))
 
-            # To settings
-            scaler = pickle.load(open(self.mainDir + 'Production/v{}/Scaler.pickle'.format(self.version), 'rb'))
-            self.settings['normalize'] = {
-                'input': {
-                    'features': [k for k in features if k not in self.dateCols + self.catCols],
-                    'means': scaler.mean_.tolist(),
-                    'stds': scaler.var_.tolist(),
-                }
-            }
-            if self.mode == 'regression':
-                shutil.copy(self.mainDir + 'Features/OutputScaler_{}_{}.pickle'.format(feature_set, self.version),
-                            self.mainDir + 'Production/v{}/OutputScaler.pickle'.format(self.version))
-                output_scaler = pickle.load(open(self.mainDir + 'Production/v{}/OutputScaler.pickle'
-                                                 .format(self.version), 'rb'))
-                self.settings['normalize']['output'] = {
-                    'means': output_scaler.mean_.tolist(),
-                    'stds': output_scaler.var_.tolist(),
-                }
+            if self.verbose > 0:
+                print('[AutoML] Model fully fitted, in-sample {}: {:4f}'
+                      .format(self.objective, self.scorer(self.bestModel, self.x[self.featureSets[feature_set]],
+                                                          self.y)))
 
-            # Normalize
-            x = self._normalize_input(x)
-            if self.mode == 'regression':
-                y = self._normalize_output(y)
-            else:
-                y = self.y.to_numpy()
+        else:
+            if self.verbose > 0:
+                print('[AutoML] Loading existing model file.')
 
-        # Cluster Features require additional 'Centers' file
-        self.settings['k_means'] = False
-        if any(['dist__' in key for key in features]):
-            shutil.copy(self.mainDir + 'Features/KMeans_v{}.csv'.format(self.version),
-                        self.mainDir + 'Production/v{}/KMeans.csv'.format(self.version))
-            # To settings
-            k_means = pd.read_csv(self.mainDir + 'Production/v{}/KMeans.csv'.format(self.version))
-            self.settings['k_means'] = {
-                'centers': k_means.iloc[:-2].to_dict(),
-                'means': k_means.iloc[-2].to_dict(),
-                'stds': k_means.iloc[-1].to_dict(),
-            }
-
-        # Model
-        models = Modelling(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
-        self.bestModel = [mod for mod in models if type(mod).__name__ == model][0]
-        self.bestModel.set_params(**params)
-        self.bestModel.fit(x, y)
-        joblib.dump(self.bestModel, self.mainDir + 'Production/v{}/Model.joblib'.format(self.version))
-
-        # Predict function
-        predict_code = self.create_predict_function(self.customCode)
-        with open(self.mainDir + 'Production/v{}/Predict.py'.format(self.version), 'w') as f:
-            f.write(predict_code)
-        with open(self.mainDir + 'Production/v{}/__init__.py'.format(self.version), 'w') as f:
-            f.write('')
-
-        # Pipeline
-        pickle.dump(self, open(self.mainDir + 'Production/v{}/Pipeline.pickle'.format(self.version), 'wb'))
-
-        # Rapport
+        # Report
         if not os.path.exists('{}Documentation/v{}/{}_{}.pdf'.format(self.mainDir, self.version, model, feature_set)):
             self.document(self.bestModel, feature_set)
         shutil.copy('{}Documentation/v{}/{}_{}.pdf'.format(self.mainDir, self.version, model, feature_set),
                     '{}Production/v{}/Report.pdf'.format(self.mainDir, self.version))
 
-        # Settings
-        self.settings['model'] = model  # The string
-        self.settings['params'] = params
-        self.settings['dummies'] = self.dataProcessor.dummies
+        # Save settings
         json.dump(self.settings, open(self.mainDir + 'Production/v{}/Settings.json'
                                       .format(self.version), 'w'), indent=4)
 
-        # Notify of results
-        print('[AutoML] Preparing Production Env Files for {}, feature set {}'.format(model, feature_set))
-        print('[AutoML] Model fully fitted, in-sample {}: {:4f}'
-              .format(self.objective, self.scorer(self.bestModel, x, y)))
         return self
 
     def _error_analysis(self):
         # todo implement
         pass
 
-    def convert_data(self, data: pd.DataFrame) -> [pd.DataFrame, pd.Series]:
+    def convert_data(self, x: pd.DataFrame) -> [pd.DataFrame, pd.Series]:
         """
         Function that uses the same process as the pipeline to clean data.
         Useful if pipeline is pickled for production
@@ -1040,36 +1128,28 @@ class Pipeline:
         ----------
         data [pd.DataFrame]: Input features
         """
-        # Clean data
-        data = Utils.clean_keys(data)
-        data = self.dataProcessor.convert_data_types(data)
-        data = self.dataProcessor.remove_duplicates(data)
-        data = self.dataProcessor.remove_outliers(data)
-        data = self.dataProcessor.remove_missing_values(data)
-        if data.astype('float32').replace([np.inf, -np.inf], np.nan).isna().sum().sum() != 0:
+        # Process data
+        x = self.dataProcesser.transform(x)
+        if x.astype('float32').replace([np.inf, -np.inf], np.nan).isna().sum().sum() != 0:
             raise ValueError('Data should not contain NaN or Infinities after cleaning!')
 
-        # Save output
-        if self.target in data.keys():
-            y = data[self.target]
-        else:
-            y = None
+        # Split output
+        y = None
+        if self.target in x.keys():
+            y = x[self.target]
+            if not self.includeOutput:
+                x = x.drop(self.target, axis=1)
+
+        # Sequence
+        if self.sequence:
+            x, y = self.dataSequencer.convert(x, y)
 
         # Convert Features
-        if self.settings['k_means']:
-            x = self.featureProcessor.transform(data=data, features=self.settings['features'],
-                                                k_means=self.settings['k_means'])
-        else:
-            x = self.featureProcessor.transform(data, self.settings['features'])
+        x = self.featureProcesser.transform(x, self.settings['feature_set'])
 
-        if x.astype('float32').replace([np.inf, -np.inf], np.nan).isna().sum().sum() != 0:
-            raise ValueError('Data should not contain NaN or Infinity after adding features!')
-
-        # Normalize
-        if self.normalize:
-            x[x.keys()] = self._standardize_input(x)
-            if self.mode == 'regression' and y is not None:
-                y = self._standardize_output(y)
+        # Standardize
+        if self.standardize:
+            x, y = self._transform_standardize(x, y)
 
         # Return
         return x, y
@@ -1082,21 +1162,19 @@ class Pipeline:
         ----------
         data [pd.DataFrame]: data to do prediction on
         """
+        assert self.is_fitted, "Pipeline not yet fitted."
         # Feature Extraction, Selection and Normalization
         if self.verbose > 0:
             print('[AutoML] Predicting with {}, v{}'.format(type(self.bestModel).__name__, self.version))
+
+        # Convert
         x, y = self.convert_data(data)
 
         # Predict
-        if self.mode == 'regression':
-            if self.normalize:
-                predictions = self._inverse_standardize_output(self.bestModel.predict(x))
-            else:
-                predictions = self.bestModel.predict(x)
-        elif self.mode == 'classification':
-            predictions = self.bestModel.predict(x)
+        if self.mode == 'regression' and self.standardize:
+            predictions = self._inverse_standardize(self.bestModel.predict(x))
         else:
-            raise ValueError('Unsupported mode')
+            predictions = self.bestModel.predict(x)
 
         return predictions
 
@@ -1108,6 +1186,7 @@ class Pipeline:
         ----------
         data [pd.DataFrame]: data to do prediction on
         """
+        assert self.is_fitted, "Pipeline not yet fitted."
         # Tests
         assert self.mode == 'classification', 'Predict_proba only available for classification'
         assert hasattr(self.bestModel, 'predict_proba'), '{} has no attribute predict_proba'.format(
@@ -1122,74 +1201,3 @@ class Pipeline:
 
         # Predict
         return self.bestModel.predict_proba(x)
-
-    def create_predict_function(self, custom_code: str) -> str:
-        """
-        This function returns a string containing a full python script to make predictions.
-        This is in a predefined format, a Predict class, with a predict function taking the arguments
-        model [Object]: trained sklearn-like class with the .fit() function
-        features [list[str]]: list of strings containing all features fed to the model
-        scaler [sklearn.preprocessing.StandardScaler]: For normalization
-        data [pd.DataFrame]: Input data to predict for
-        Now this function has the arg decoding, which allows custom code injection
-
-        Parameters
-        ----------
-        custom_code [str]: Custom code
-        """
-        print('Creating Prediction {}'.format(self.version))
-        data_process = self.dataProcessor.export_function()
-        feature_process = self.featureProcessor.export_function()
-        return '''import re
-import copy
-import warnings
-import itertools
-import numpy as np
-import pandas as pd
-
-
-class Predict(object):
-
-    def __init__(self):
-        self.version = 'v{:.0f}'
-
-    @staticmethod
-    def predict(model, features, data, **args):
-        """
-        Prediction function for Amplo AutoML.
-        This is in a predefined format:
-        - a 'Predict' class, with a 'predict' function taking the arguments:
-            model: trained sklearn-like class with the .fit() function
-            features: list of strings containing all features fed to the model
-            data: the data to predict on
-        Note: May depend on additional named arguments within args.
-        """
-        ###############
-        # Custom Code #
-        ###############'''.format(self.version) + textwrap.indent(custom_code, '        ') \
-               + data_process + feature_process + '''
-        ###########
-        # Predict #
-        ###########
-        mode, normalize = '{}', {}
-
-        # Normalize
-        if normalize:
-            assert 'scaler' in args.keys(), 'When Normalizing=True, scaler needs to be provided in args'
-            x = args['scaler'].transform(x)
-
-        # Predict
-        if mode == 'regression':
-            if normalize:
-                assert 'output_scaler' in args.keys(), 'When Normalizing=True, o_scaler needs to be provided in args'
-                return args['output_scaler'].inverse_transform(model.predict(x))
-            else:
-                return model.predict(x)
-        elif mode == 'classification':
-            try:
-                return model.predict_proba(x)
-            except AttributeError:
-                return model.predict(x)
-        else:
-            raise NotImplementedError('Mode not supported, pick between classification and regression.')
-'''.format(self.mode, self.normalize)

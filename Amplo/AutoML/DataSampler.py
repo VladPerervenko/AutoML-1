@@ -86,7 +86,6 @@ class DataSampler:
         n_samples = len(y)
         imbalance = y.value_counts().values / n_samples
         n_min_samples = y.value_counts().min() - 2
-        print(n_min_samples)
         print('[AutoML] Data Balancer: Found class balance: {}.'
               .format(', '.join(['{:.1f}%'.format(i * 100) for i in imbalance])))
 

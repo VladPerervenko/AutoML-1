@@ -13,7 +13,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import RandomForestRegressor
 
 
-class Documenting:
+class Documenter:
 
     def __init__(self, pipeline):
         if not os.path.exists(pipeline.mainDir + 'Documentation/v{}'.format(pipeline.version)):

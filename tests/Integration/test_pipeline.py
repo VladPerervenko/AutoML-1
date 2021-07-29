@@ -1,9 +1,6 @@
 import os
 import json
-import types
-import pickle
 import shutil
-import joblib
 import unittest
 import numpy as np
 import pandas as pd
@@ -14,16 +11,7 @@ from sklearn.metrics import log_loss
 from Amplo import Pipeline
 
 
-def parseModel(module_text):
-    module_value = compile(module_text, 'Predict.py', 'exec')
-    module = types.ModuleType('Predict')
-    exec(module_value, module.__dict__)
-    return getattr(module, 'Predict')
-
-
 class TestPipeline(unittest.TestCase):
-    # todo test normalizing
-    # todo test dummies
 
     @classmethod
     def setUpClass(cls):
@@ -64,24 +52,20 @@ class TestPipeline(unittest.TestCase):
         c, _ = pipeline.convert_data(self.r_data.drop('target', axis=1))
         x = pipeline.x[pipeline.settings['features']]
         y = self.r_data['target']
-        assert np.allclose(c.values, x.values), 'Total miss: {}'.format(np.sum(abs(c.values - x.values) > 1e-3))
-        assert np.allclose(y, pipeline.y)       # y mustn't have changed
+        assert np.allclose(c.values, x.values), "Inconsistent X: max diff: {:.2e}"\
+            .format(np.max(abs(c.values - x.values)))
+        assert np.allclose(y, pipeline.y), "Inconsistent Y"
 
         # Pipeline Prediction
         prediction = pipeline.predict(self.r_data)
         assert len(prediction.shape) == 1
         assert r2_score(self.r_data['target'], prediction) > 0.75
 
-        # Pickle Prediction
-        p = pickle.load(open('AutoML/Production/v1/Pipeline.pickle', 'rb'))
+        # Settings prediction
+        settings = json.load(open('AutoML/Production/v1/Settings.json', 'r'))
+        p = Pipeline()
+        p.load_settings(settings, pipeline.bestModel)
         assert np.allclose(p.predict(self.r_data), prediction)
-
-        # Script prediction
-        path = 'AutoML/Production/v1/'
-        model = joblib.load(path + 'Model.joblib')
-        features = json.load(open(path + 'Features.json', 'r'))
-        predict = parseModel(open(path + 'Predict.py', 'r').read())
-        assert np.allclose(predict().predict(model=model, features=features, data=self.r_data), prediction)
 
         # Cleanup
         shutil.rmtree('AutoML')
@@ -93,6 +77,7 @@ class TestPipeline(unittest.TestCase):
                             name='AutoClass',
                             mode='classification',
                             objective='neg_log_loss',
+                            standardize=True,
                             feature_timeout=5,
                             grid_search_iterations=1,
                             grid_search_time_budget=10,
@@ -115,16 +100,11 @@ class TestPipeline(unittest.TestCase):
         prediction = pipeline.predict_proba(self.c_data)
         assert log_loss(self.c_data['target'], prediction) > -1
 
-        # Pickle prediction
-        p = pickle.load(open('AutoML/Production/v1/Pipeline.pickle', 'rb'))
+        # Settings prediction
+        settings = json.load(open('AutoML/Production/v1/Settings.json', 'r'))
+        p = Pipeline()
+        p.load_settings(settings, pipeline.bestModel)
         assert np.allclose(p.predict_proba(self.c_data), prediction)
-
-        # Script prediction
-        path = 'AutoML/Production/v1/'
-        model = joblib.load(path + 'Model.joblib')
-        features = json.load(open(path + 'Features.json', 'r'))
-        predict = parseModel(open(path + 'Predict.py', 'r').read())
-        assert np.allclose(predict().predict(model=model, features=features, data=self.c_data), prediction)
 
         # Cleanup
         shutil.rmtree('AutoML')

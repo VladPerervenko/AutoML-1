@@ -12,7 +12,7 @@ class RegressionDocumenting(BinaryDocumenting):
 
     def __init__(self, pipeline):
         super().__init__(pipeline)
-        self.y_not_normalized = None
+        self.y_not_standardized = None
 
     def analyse(self):
         # Cross-Validation Plots
@@ -43,8 +43,8 @@ class RegressionDocumenting(BinaryDocumenting):
 
             # Plot
             ax[i // 2][i % 2].set_title('Fold-{}'.format(i))
-            if self.p.normalize:
-                ax[i // 2][i % 2].plot(self.y_not_normalized[v], color='#2369ec')
+            if self.p.standardize:
+                ax[i // 2][i % 2].plot(self.y_not_standardized[v], color='#2369ec')
                 ax[i // 2][i % 2].plot(self.p.bestOutputScaler.inverse_transform(model.predict(xv)),
                                        color='#ffa62b', alpha=0.4)
             else:

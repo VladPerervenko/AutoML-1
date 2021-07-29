@@ -19,7 +19,7 @@ from sklearn import svm
 from sklearn import metrics
 
 
-class Modelling:
+class Modeller:
 
     def __init__(self,
                  mode='regression',

@@ -15,7 +15,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.ensemble import RandomForestClassifier
 
 
-class DataExploring:
+class DataExplorer:
 
     def __init__(self, data,
                  y=None,

@@ -1,0 +1,764 @@
+import time
+import copy
+import ppscore
+import warnings
+import itertools
+import numpy as np
+import pandas as pd
+from boruta import BorutaPy
+from tqdm import tqdm
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.cluster import MiniBatchKMeans
+from Amplo.Utils import clean_keys
+
+
+class FeatureProcesser:
+
+    def __init__(self,
+                 max_lags: int = 10,
+                 max_diff: int = 2,
+                 information_threshold: float = 0.99,
+                 extract_features: bool = True,
+                 mode: str = 'classification',
+                 timeout: int = 900,
+                 verbosity: int = 1):
+        """
+        Automatically extracts and selects features. Removes Co-Linear Features.
+        Included Feature Extraction algorithms:
+        - Multiplicative Features
+        - Dividing Features
+        - Additive Features
+        - Subtractive Features
+        - Trigonometric Features
+        - K-Means Features
+        - Lagged Features
+        - Differencing Features
+
+        Included Feature Selection algorithms:
+        - Random Forest Feature Importance (Threshold and Increment)
+        - Predictive Power Score
+        - Boruta
+
+        Parameters
+        ----------
+        max_lags [int]: Maximum lags for lagged features to analyse
+        max_diff [int]: Maximum differencing order for differencing features
+        information_threshold [float]: Information threshold for co-linear features
+        extract_features [bool]: Whether or not to extract features
+        folder [str]: Parent folder for results
+        mode [str]: classification / regression
+        timeout [int]: Feature Extraction can be exhausting for many features, this limits the scope
+        version [int]: To version all stored files
+        """
+        # Tests
+        assert 0 <= max_lags < 120, 'Max lags needs to be within [0, 50]'
+        assert 0 <= max_diff < 3, 'Max diff needs to be within [0, 3]'
+        assert 0 < information_threshold < 1, 'Information threshold needs to be within [0, 1]'
+        assert mode.lower() in ['classification', 'regression'], \
+            'Mode needs to be specified (regression or classification)'
+
+        # Parameters
+        self.x = None
+        self.originalInput = None
+        self.y = None
+        self.model = None
+        self.mode = mode
+        self.timeout = timeout
+
+        # Register
+        self.is_fitted = False
+        self.baseScore = {}
+        self.coLinearFeatures = []
+        self.linearFeatures = []
+        self.crossFeatures = []
+        self.trigonometricFeatures = []
+        self.inverseFeatures = []
+        self.kMeansFeatures = []
+        self.laggedFeatures = []
+        self.diffFeatures = []
+        self.featureSets = {}
+        self._means = None
+        self._stds = None
+        self._centers = None
+
+        # Parameters
+        self.maxLags = max_lags
+        self.maxDiff = max_diff
+        self.informationThreshold = information_threshold
+        self.extractFeatures = extract_features
+        self.verbosity = verbosity
+
+    def fit_transform(self, x: pd.DataFrame, y: pd.Series) -> [pd.DataFrame, dict]:
+        """
+        Extracts features, and selects them
+        Parameters
+        ----------
+        x [pd.DataFrame]: Input data (features)
+        y [pd.Series]: Output data (dependent)
+
+        Returns
+        -------
+        x [pd.DataFrame]: Input data with enriched features
+        feature_sets [dict]: A dictionary with various selected feature sets
+        """
+        # First clean (just to make sure), and set in class memory
+        self._clean_set(x, y)
+
+        # Remove co-linear features
+        self._remove_co_linearity()
+
+        # Extract
+        if self.extractFeatures:
+            self._calc_baseline()
+            self._add_cross_features()
+            self._add_k_means_features()
+            self._add_trigonometry_features()
+            self._add_inverse_features()
+            self._add_diff_features()
+            self._add_lagged_features()
+
+        # Select
+        self.featureSets['PPS'] = self._sel_predictive_power_score()
+        self.featureSets['RFT'], self.featureSets['RFI'] = self._sel_gini_impurity()
+
+        # Set fitted
+        self.is_fitted = True
+
+        return self.x, self.featureSets
+
+    def transform(self, data: pd.DataFrame, feature_set: str) -> pd.DataFrame:
+        """
+        Transforms dataset features into enriched and selected features
+
+        Parameters
+        ----------
+        data [pd.DataFrame]: Input data
+        feature_set [str]: Which feature set to use for selection
+        """
+        assert self.is_fitted, "Can only use transform after object is fitted."
+
+        # Clean & downcast data
+        data = data.astype('float32').clip(lower=1e-12, upper=1e12).fillna(0)
+
+        # Get original features
+        features = self.featureSets[feature_set]
+        linear_features = [k for k in features if '__sub__' in k or '__add__' in k]
+        cross_features = [k for k in features if '__x__' in k or '__d__' in k]
+        trigonometric_features = [k for k in features if 'sin__' in k or 'cos__' in k]
+        inverse_features = [k for k in features if 'inv__' in k]
+        k_means_features = [k for k in features if 'dist__' in k]
+        diff_features = [k for k in features if '__diff__' in k]
+        lag_features = [k for k in features if '__lag__' in k]
+        original_features = [k for k in features if '__' not in k]
+
+        # Fill missing features for normalization
+        required = copy.copy(original_features)
+        required += list(itertools.chain.from_iterable([s.split('__')[::2] for s in cross_features]))
+        required += list(itertools.chain.from_iterable([s.split('__')[::2] for s in linear_features]))
+        required += list(itertools.chain.from_iterable([s.split('__')[1] for s in trigonometric_features]))
+        required += list(itertools.chain.from_iterable([s[5:] for s in inverse_features]))
+        required += list(itertools.chain.from_iterable([s.split('__diff__')[0] for s in diff_features]))
+        required += list(itertools.chain.from_iterable([s.split('__lag__')[0] for s in lag_features]))
+
+        # Remove duplicates from required
+        required = list(set(required))
+
+        # Impute missing keys
+        missing_keys = [k for k in required if k not in data.keys()]
+        if len(missing_keys) > 0:
+            warnings.warn('Imputing {} keys'.format(len(missing_keys)))
+        for k in missing_keys:
+            data.loc[:, k] = np.zeros(len(data))
+
+        # Start Output with selected original features
+        x = data[original_features]
+
+        # Multiplicative features
+        for key in cross_features:
+            if '__x__' in key:
+                key_a, key_b = key.split('__x__')
+                feature = data[key_a] * data[key_b]
+                x.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
+            else:
+                key_a, key_b = key.split('__d__')
+                feature = data[key_a] / data[key_b]
+                x.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
+
+        # Linear features
+        for key in linear_features:
+            if '__sub__' in key:
+                key_a, key_b = key.split('__sub__')
+                feature = data[key_a] - data[key_b]
+                x.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
+            else:
+                key_a, key_b = key.split('__add__')
+                feature = data[key_a] + data[key_b]
+                x.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
+
+        # Differentiated features
+        for k in diff_features:
+            key, diff = k.split('__diff__')
+            feature = data[key]
+            for i in range(1, int(diff)):
+                feature = feature.diff().fillna(0)
+            x.loc[:, k] = feature
+
+        # K-Means features
+        if len(k_means_features) != 0:
+            temp = copy.deepcopy(data.loc[:, self._centers.keys()])
+            # Normalize
+            temp -= self._means
+            temp /= self._stds
+            # Calculate centers
+            for key in self.kMeansFeatures:
+                ind = int(key[key.find('dist__') + 6: key.rfind('_')])
+                x.loc[:, key] = np.sqrt(np.square(temp - self._centers.iloc[ind]).sum(axis=1))
+
+        # Lagged features
+        for k in lag_features:
+            key, lag = k.split('__lag__')
+            x.loc[:, k] = data[key].shift(-int(lag), fill_value=0)
+
+        # Trigonometric features
+        for k in trigonometric_features:
+            func, key = k.split('__')
+            x.loc[:, k] = getattr(np, func)(data[key])
+
+        # Inverse Features
+        for k in inverse_features:
+            key = k[5:]
+            x.loc[:, k] = 1 / data[key]
+
+        # Enforce the right order of features
+        x = x[features]
+
+        # And clip everything (we do this with all features in ._analyse_feature(), no exception)
+        x = x.astype('float32').clip(lower=1e-12, upper=1e12).fillna(0)
+
+        return x
+
+    def get_settings(self) -> dict:
+        """
+        Get settings to recreate fitted object.
+        """
+        assert self.is_fitted, "Object not yet fitted."
+        return {
+            'linearFeatures': self.linearFeatures,
+            'crossFeatures': self.crossFeatures,
+            'trigonometricFeatures': self.trigonometricFeatures,
+            'inverseFeatures': self.inverseFeatures,
+            'kMeansFeatures': self.kMeansFeatures,
+            'laggedFeatures': self.laggedFeatures,
+            'diffFeatures': self.diffFeatures,
+            'featureSets': self.featureSets,
+            '_means': self._means.to_json(),
+            '_stds': self._stds.to_json(),
+            '_centers': self._centers.to_json(),
+        }
+
+    def load_settings(self, settings: dict) -> None:
+        """
+        Loads settings from dictionary and recreates a fitted object
+        """
+        self.linearFeatures = settings['linearFeatures']
+        self.crossFeatures = settings['crossFeatures']
+        self.trigonometricFeatures = settings['trigonometricFeatures']
+        self.inverseFeatures = settings['inverseFeatures']
+        self.kMeansFeatures = settings['kMeansFeatures']
+        self.laggedFeatures = settings['laggedFeatures']
+        self.diffFeatures = settings['diffFeatures']
+        self.featureSets = settings['featureSets']
+        self._means = settings['_means']
+        self._stds = settings['_stds']
+        self._centers = settings['_centers']
+        self.is_fitted = True
+
+    def _clean_set(self, x: pd.DataFrame, y: pd.Series) -> None:
+        """
+        Does some basic cleaning just in case, and sets the input/output in memory.
+        """
+        # Sets validation model
+        if self.mode == 'classification':
+            self.model = DecisionTreeClassifier(max_depth=3)
+            if y.nunique() > 2:
+                self.mode = 'multiclass'
+        elif self.mode == 'regression':
+            self.model = DecisionTreeRegressor(max_depth=3)
+
+        # Bit of necessary data cleaning (shouldn't change anything)
+        x = clean_keys(x.astype('float32').clip(lower=1e-12, upper=1e12).fillna(0).reset_index(drop=True))
+        self.x = copy.copy(x)
+        self.originalInput = copy.copy(x)
+        self.y = y.replace([np.inf, -np.inf], 0).fillna(0).reset_index(drop=True)
+
+    def _calc_baseline(self):
+        """
+        Calculates feature value of the original features
+        """
+        baseline = {}
+        for key in self.originalInput.keys():
+            baseline[key] = self._analyse_feature(self.x[key])
+        self.baseline = pd.DataFrame(baseline).max(axis=1)
+
+    def _analyse_feature(self, feature: pd.Series) -> list:
+        """
+        Analyses and scores a feature
+        In case of multiclass, we score per class :)
+        """
+        # Clean feature
+        feature = feature.clip(lower=1e-12, upper=1e12).fillna(0).values.reshape((-1, 1))
+
+        # Copy & fit model
+        m = copy.copy(self.model)
+        m.fit(feature, self.y)
+
+        # Score
+        if self.mode == 'multiclass':
+            # With weight (self.y == i)
+            return [m.score(feature, self.y, self.y == i) for i in self.y.unique()]
+        else:
+            # Without weight
+            return [m.score(feature, self.y)]
+
+    def _accept_feature(self, score: list) -> bool:
+        """
+        Whether or not to accept a new feature,
+        basically we accept if it's higher than baseline for any of the classes
+        """
+        if any(score > self.baseline.values):
+            return True
+        else:
+            return False
+
+    @ staticmethod
+    def _select_features(scores: dict) -> list:
+        """
+        Run at the end of all feature extraction calls.
+        Select best 50 features per class.
+        In case of regression, just best 50 (only one 'class')
+
+        Parameters
+        ----------
+        scores [dict]: Features as keys, scores as values
+
+        Returns
+        -------
+        selected_features [list[str]]: Returns all selected features
+        """
+        # If scores is empty, return empty list
+        if len(scores) == 0:
+            return []
+
+        # Convert dict to dataframe
+        scores = pd.DataFrame(scores)
+
+        # Select indices
+        features_per_class = 50
+        indices = []
+        for score in range(len(scores)):    # Loop through classes
+            indices += [i for i, k in enumerate(scores.keys())
+                        if k in scores.loc[score].sort_values(ascending=False).keys()[:features_per_class]]
+
+        # Return Keys
+        return list(scores.keys()[np.unique(indices)])
+
+    def _remove_co_linearity(self):
+        """
+        Calculates the Pearson Correlation Coefficient for all input features.
+        Those higher than the information threshold are linearly codependent (i.e., describable by y = a x + b)
+        These features add little to no information and are therefore removed.
+        """
+        if self.verbosity > 0:
+            print('[AutoML] Analysing co-linearity')
+
+        # Get co-linear features
+        nk = len(self.x.keys())
+        norm = (self.x - self.x.mean(skipna=True, numeric_only=True)).to_numpy()
+        ss = np.sqrt(np.sum(norm ** 2, axis=0))
+        corr_mat = np.zeros((nk, nk))
+        for i in range(nk):
+            for j in range(nk):
+                if i == j:
+                    continue
+                if corr_mat[i, j] == 0:
+                    c = abs(np.sum(norm[:, i] * norm[:, j]) / (ss[i] * ss[j]))
+                    corr_mat[i, j] = c
+                    corr_mat[j, i] = c
+        upper = np.triu(corr_mat)
+        self.coLinearFeatures = self.x.keys()[np.sum(upper > self.informationThreshold, axis=0) > 0].to_list()
+
+        # Parse results
+        self.originalInput = self.originalInput.drop(self.coLinearFeatures, axis=1)
+        if self.verbosity > 0:
+            print('[AutoML] Removed {} Co-Linear features ({:.3f} %% threshold)'
+                  .format(len(self.coLinearFeatures), self.informationThreshold))
+
+    def _add_cross_features(self):
+        """
+        Calculates cross-feature features with m and multiplication.
+        Should be limited to say ~500.000 features (runs about 100-150 features / second)
+        """
+        if self.verbosity > 0:
+            print('[AutoML] Analysing cross features')
+        scores = {}
+        n_keys = len(self.originalInput.keys())
+        start_time = time.time()
+
+        # Analyse Cross Features
+        for i, key_a in enumerate(tqdm(self.originalInput.keys())):
+            accepted_for_key_a = 0
+            for j, key_b in enumerate(self.originalInput.keys()[np.random.permutation(n_keys)]):
+                # Skip if they're the same
+                if key_a == key_b:
+                    continue
+                # Skip rest if key_a is not useful in first max(50, 30%) (uniform)
+                if accepted_for_key_a == 0 and j > max(50, int(n_keys / 3)):
+                    continue
+                # Skip if we're out of time
+                if time.time() - start_time > self.timeout:
+                    continue
+
+                # Analyse Division
+                feature = self.x[key_a] / self.x[key_b]
+                score = self._analyse_feature(feature)
+                # Accept or not
+                if self._accept_feature(score):
+                    scores[key_a + '__d__' + key_b] = score
+                    accepted_for_key_a += 1
+
+                # Multiplication i * j == j * i, so skip if j >= i
+                if j > i:
+                    continue
+
+                # Analyse Multiplication
+                feature = self.x[key_a] * self.x[key_b]
+                score = self._analyse_feature(feature)
+                # Accept or not
+                if self._accept_feature(score):
+                    scores[key_a + '__x__' + key_b] = score
+                    accepted_for_key_a += 1
+
+        # Select valuable features
+        self.crossFeatures = self._select_features(scores)
+
+        # Add features
+        for k in self.crossFeatures:
+            if '__x__' in k:
+                key_a, key_b = k.split('__x__')
+                feature = self.x[key_a] * self.x[key_b]
+                self.x[k] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
+            else:
+                key_a, key_b = k.split('__d__')
+                feature = self.x[key_a] / self.x[key_b]
+                self.x[k] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
+
+        # Print result
+        if self.verbosity > 0:
+            print('[AutoML] Added {} cross features'.format(len(self.crossFeatures)))
+
+    def _add_trigonometry_features(self):
+        """
+        Calculates trigonometry features with sinus, cosines
+        """
+        if self.verbosity > 0:
+            print('[AutoML] Analysing Trigonometric Features')
+
+        scores = {}
+        for key in tqdm(self.originalInput.keys()):
+            # Sinus feature
+            sin_feature = np.sin(self.x[key])
+            score = self._analyse_feature(sin_feature)
+            if self._accept_feature(score):
+                scores['sin__' + key] = score
+
+            # Co sinus feature
+            cos_feature = np.cos(self.x[key])
+            score = self._analyse_feature(cos_feature)
+            if self._accept_feature(score):
+                scores['cos__' + key] = score
+
+        # Select valuable features
+        self.trigonometricFeatures = self._select_features(scores)
+
+        # Add features
+        for k in self.trigonometricFeatures:
+            func, key = k.split('__')
+            self.x[k] = getattr(np, func)(self.x[key])
+
+        # Store
+        if self.verbosity > 0:
+            print('[AutoML] Added {} trigonometric features'.format(len(self.trigonometricFeatures)))
+
+    def _add_linear_features(self):
+        """
+        Calculates simple additive and subtractive features
+        """
+        # Load if available
+        if self.verbosity > 0:
+            print('[AutoML] Analysing Linear Features'.format(len(self.linearFeatures)))
+
+        scores = {}
+        start_time = time.time()
+        n_keys = len(self.originalInput.keys())
+        for i, key_a in enumerate(self.originalInput.keys()):
+            accepted_for_key_a = 0
+            for j, key_b in enumerate(self.originalInput.keys()[np.random.permutation(n_keys)]):
+                # Skip if they're the same
+                if key_a == key_b:
+                    continue
+                # Skip rest if key_a is not useful in first max(50, 30%) (uniform)
+                if accepted_for_key_a == 0 and j > max(50, int(n_keys / 3)):
+                    continue
+                # Skip if we're out of time
+                if time.time() - start_time > self.timeout:
+                    continue
+
+                # Subtracting feature
+                feature = self.x[key_a] - self.x[key_b]
+                score = self._analyse_feature(feature)
+                if self._accept_feature(score):
+                    scores[key_a + '__sub__' + key_b] = score
+                    accepted_for_key_a += 1
+
+                # A + B == B + A, so skip if i > j
+                if j > i:
+                    continue
+
+                # Additive feature
+                feature = self.x[key_a] + self.x[key_b]
+                score = self._analyse_feature(feature)
+                if self._accept_feature(score):
+                    scores[key_a + '__add__' + key_b] = score
+                    accepted_for_key_a += 1
+
+        # Select valuable Features
+        self.linearFeatures = self._select_features(scores)
+
+        # Add features
+        for key in self.linearFeatures:
+            if '__sub__' in key:
+                key_a, key_b = key.split('__sub__')
+                feature = self.x[key_a] - self.x[key_b]
+                self.x.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
+            else:
+                key_a, key_b = key.split('__add__')
+                feature = self.x[key_a] + self.x[key_b]
+                self.x.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
+
+        # store
+        if self.verbosity > 0:
+            print('[AutoML] Added {} additive features'.format(len(self.linearFeatures)))
+
+    def _add_inverse_features(self):
+        """
+        Calculates inverse features.
+        """
+        if self.verbosity > 0:
+            print('[AutoML] Analysing Inverse Features')
+
+        scores = {}
+        for i, key in enumerate(self.originalInput.keys()):
+            inv_feature = 1 / self.x[key]
+            score = self._analyse_feature(inv_feature)
+            if self._accept_feature(score):
+                scores['inv__' + key] = score
+
+        self.inverseFeatures = self._select_features(scores)
+
+        # Add features
+        for k in self.inverseFeatures:
+            key = k[5:]
+            self.x[k] = 1 / self.x[key]
+
+        # Store
+        if self.verbosity > 0:
+            print('[AutoML] Added {} inverse features.'.format(len(self.inverseFeatures)))
+
+    def _add_k_means_features(self):
+        """
+        Analyses the correlation of k-means features.
+        k-means is a clustering algorithm which clusters the data.
+        The distance to each cluster is then analysed.
+        """
+        # Check if not exist
+        if self.verbosity > 0:
+            print('[AutoML] Calculating and Analysing K-Means features')
+
+        # Prepare data
+        data = copy.copy(self.originalInput)
+        self._means = data.mean()
+        self._stds = data.std()
+        self._stds[self._stds == 0] = 1
+        data -= self._means
+        data /= self._stds
+
+        # Determine clusters
+        clusters = min(max(int(np.log10(len(self.originalInput)) * 8), 8), len(self.originalInput.keys()))
+        k_means = MiniBatchKMeans(n_clusters=clusters)
+        column_names = ['dist__{}_{}'.format(i, clusters) for i in range(clusters)]
+        distances = pd.DataFrame(columns=column_names, data=k_means.fit_transform(data))
+        distances = distances.clip(lower=1e-12, upper=1e12).fillna(0)
+        self._centers = pd.DataFrame(columns=self.originalInput.keys(), data=k_means.cluster_centers_)
+
+        # Analyse correlation
+        scores = {}
+        for key in tqdm(distances.keys()):
+            score = self._analyse_feature(distances[key])
+            if self._accept_feature(score):
+                scores[key] = score
+
+        # Add the valuable features
+        self.kMeansFeatures = self._select_features(scores)
+        for k in self.kMeansFeatures:
+            self.x[k] = distances[k]
+
+        if self.verbosity > 0:
+            print('[AutoML] Added {} K-Means features ({} clusters)'.format(len(self.kMeansFeatures), clusters))
+
+    def _add_diff_features(self):
+        """
+        Analyses whether the diff signal of the data should be included.
+        """
+        # Check if we're allowed
+        if self.maxDiff == 0:
+            if self.verbosity > 0:
+                print('[AutoML] Diff features skipped, max diff = 0')
+            return
+
+        if self.verbosity > 0:
+            print('[AutoML] Analysing diff features')
+
+        # Copy data so we can diff without altering original data
+        keys = self.originalInput.keys()
+        diff_input = copy.copy(self.originalInput)
+
+        # Calculate scores
+        scores = {}
+        for diff in tqdm(range(1, self.maxDiff + 1)):
+            diff_input = diff_input.diff().fillna(0)
+            for key in keys:
+                score = self._analyse_feature(diff_input[key])
+                if self._accept_feature(score):
+                    scores[key + '__diff__{}'.format(diff)] = score
+
+        # Select the valuable features
+        self.diffFeatures = self._select_features(scores)
+
+        # Add Diff Features
+        for k in self.diffFeatures:
+            key, diff = k.split('__diff__')
+            feature = self.x[key]
+            for i in range(1, int(diff)):
+                feature = feature.diff().clip(lower=1e-12, upper=1e12).fillna(0)
+            self.x[k] = feature
+
+        # Print output
+        if self.verbosity > 0:
+            print('[AutoML] Added {} differenced features'.format(len(self.diffFeatures)))
+
+    def _add_lagged_features(self):
+        """
+        Analyses the correlation of lagged features (value of sensor_x at t-1 to predict target at t)
+        """
+        # Check if allowed
+        if self.maxLags == 0:
+            if self.verbosity > 0:
+                print('[AutoML] Lagged features skipped, max lags = 0')
+            return
+
+        if self.verbosity > 0:
+            print('[AutoML] Analysing lagged features')
+
+        # Analyse
+        keys = self.originalInput.keys()
+        scores = {}
+        for lag in tqdm(range(1, self.maxLags)):
+            for key in keys:
+                score = self._analyse_feature(self.x[key].shift(lag))
+                if self._accept_feature(score):
+                    scores[key + '__lag__{}'.format(lag)] = score
+
+        # Select
+        self.laggedFeatures = self._select_features(scores)
+
+        # Add selected
+        for k in self.laggedFeatures:
+            key, lag = k.split('__lag__')
+            self.x[k] = self.originalInput[key].shift(-int(lag), fill_value=0)
+
+        if self.verbosity > 0:
+            print('[AutoML] Added {} lagged features'.format(len(self.laggedFeatures)))
+
+    def _sel_predictive_power_score(self):
+        """
+        Calculates the Predictive Power Score (https://github.com/8080labs/ppscore)
+        Assymmetric correlation based on single decision trees trained on 5.000 samples with 4-Fold validation.
+        """
+        if self.verbosity > 0:
+            print('[AutoML] Determining features with PPS')
+
+        # Copy data
+        data = self.x.copy()
+        data['target'] = self.y.copy()
+
+        # Get Predictive Power Score
+        pp_score = ppscore.predictors(data, "target")
+
+        # Select columns
+        pp_cols = pp_score['x'][pp_score['ppscore'] != 0].to_list()
+
+        if self.verbosity > 0:
+            print('[AutoML] Selected {} features with Predictive Power Score'.format(len(pp_cols)))
+        return pp_cols
+
+    def _sel_gini_impurity(self):
+        """
+        Calculates Feature Importance with Random Forest, aka Mean Decrease in Gini Impurity
+        Symmetric correlation based on multiple features and multiple trees ensemble
+        """
+        if self.verbosity > 0:
+            print('[AutoML] Determining features with RF')
+
+        # Set model
+        if self.mode == 'regression':
+            rf = RandomForestRegressor().fit(self.x, self.y)
+        elif self.mode == 'classification' or self.mode == 'multiclass':
+            rf = RandomForestClassifier().fit(self.x, self.y)
+        else:
+            raise ValueError('Method not implemented')
+
+        # Get features
+        fi = rf.feature_importances_
+        sfi = fi.sum()
+        ind = np.flip(np.argsort(fi))
+
+        # Info Threshold
+        ind_keep = [ind[i] for i in range(len(ind)) if fi[ind[:i]].sum() <= 0.85 * sfi]
+        threshold = self.x.keys()[ind_keep].to_list()
+
+        # Info increment
+        ind_keep = [ind[i] for i in range(len(ind)) if fi[i] > sfi / 200]
+        increment = self.x.keys()[ind_keep].to_list()
+
+        if self.verbosity > 0:
+            print('[AutoML] Selected {} features with 85% RF threshold'.format(len(threshold)))
+            print('[AutoML] Selected {} features with 0.5% RF increment'.format(len(increment)))
+        return threshold, increment
+
+    def _borutapy(self):
+        if self.verbosity > 0:
+            print('[AutoML] Determining features with Boruta')
+        rf = None
+        if self.mode == 'regression':
+            rf = RandomForestRegressor()
+        elif self.mode == 'classification' or self.mode == 'multiclass':
+            rf = RandomForestClassifier()
+        selector = BorutaPy(rf, n_estimators='auto', verbose=0)
+        selector.fit(self.x.to_numpy(), self.y.to_numpy())
+        bp_cols = self.x.keys()[selector.support_].to_list()
+        if self.verbosity > 0:
+            print('[AutoML] Selected {} features with Boruta'.format(len(bp_cols)))
+        return bp_cols

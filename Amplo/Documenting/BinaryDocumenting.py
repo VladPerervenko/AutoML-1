@@ -60,7 +60,7 @@ class BinaryDocumenting(FPDF):
         """
         # Asserts
         assert model is not None, 'Model cannot be none.'
-        assert feature_set in self.p.colKeep.keys(), 'Feature set unavailable'
+        assert feature_set in self.p.featureSets.keys(), 'Feature set unavailable'
 
         # Set variables
         self.model = model
@@ -95,14 +95,8 @@ class BinaryDocumenting(FPDF):
         @return:
         @rtype:
         """
-        x, y = copy.deepcopy(self.p.x[self.p.colKeep[self.feature_set]]), copy.deepcopy(self.p.y)
-
-        # Normalize
-        if self.p.normalize:
-            normalize_features = [k for k in x.keys() if k not in self.p.dateCols + self.p.catCols]
-            x[normalize_features] = self.p.bestScaler.transform(x[normalize_features])
-        self.x, self.y = x.to_numpy(), y.to_numpy().reshape(-1, 1)
-        # todo implement sequencer
+        x, y = self.p.prep_data(self.feature_set)
+        self.x, self.y = x.to_numpy(), y.to_numpy()
 
     def analyse(self):
         # Metrics & Confusion Matrix
@@ -187,13 +181,13 @@ class BinaryDocumenting(FPDF):
             np.mean(specificity), np.std(specificity)))
         print('[AutoML] F1-score:        {:.2f} \u00B1 {:.2f} %'.format(np.mean(f1_score), np.std(f1_score)))
         print('[AutoML] Confusion Matrix:')
-        print('[AutoML] Prediction / true |    Faulty    |    Healthy      ')
+        print('[AutoML] Prediction / true |     Faulty     |    Healthy      ')
         print('[AutoML]       Faulty      | {} |  {}'.format(
-            ('{:.1f} \u00B1 {:.1f} %'.format(means[0, 0], stds[0, 0])).ljust(12),
-            ('{:.1f} \u00B1 {:.1f} %'.format(means[0, 1], stds[0, 1])).ljust(12)))
+            ('{:.1f} \u00B1 {:.1f} %'.format(means[0, 0], stds[0, 0])).ljust(14),
+            ('{:.1f} \u00B1 {:.1f} %'.format(means[0, 1], stds[0, 1])).ljust(14)))
         print('[AutoML]       Healthy     | {} |  {}'.format(
-            ('{:.1f} \u00B1 {:.1f} %'.format(means[1, 0], stds[1, 0])).ljust(12),
-            ('{:.1f} \u00B1 {:.1f} %'.format(means[1, 1], stds[1, 1])).ljust(12)))
+            ('{:.1f} \u00B1 {:.1f} %'.format(means[1, 0], stds[1, 0])).ljust(14),
+            ('{:.1f} \u00B1 {:.1f} %'.format(means[1, 1], stds[1, 1])).ljust(14)))
 
         # Check whether plot is possible
         if type(self.model).__name__ == 'Lasso' or 'Ridge' in type(self.model).__name__:
@@ -455,13 +449,14 @@ class BinaryDocumenting(FPDF):
 
     def features(self):
         features = {
-            'Co-Linear Features': self.p.featureProcessor.coLinearFeatures,
-            'Arithmetic Features': self.p.featureProcessor.crossFeatures,
-            'Additive Features': self.p.featureProcessor.addFeatures,
-            'Trigonometric Features': self.p.featureProcessor.trigoFeatures,
-            'K-Means Features': self.p.featureProcessor.kMeansFeatures,
-            'Lagged Features': self.p.featureProcessor.laggedFeatures,
-            'Differentiated Features': self.p.featureProcessor.diffFeatures,
+            'Co-Linear Features': self.p.featureProcesser.coLinearFeatures,
+            'Linear Features': self.p.featureProcesser.linearFeatures,
+            'Arithmetic Features': self.p.featureProcesser.crossFeatures,
+            'Trigonometric Features': self.p.featureProcesser.trigonometricFeatures,
+            'Inverse Features': self.p.featureProcesser.inverseFeatures,
+            'K-Means Features': self.p.featureProcesser.kMeansFeatures,
+            'Lagged Features': self.p.featureProcesser.laggedFeatures,
+            'Differentiated Features': self.p.featureProcesser.diffFeatures,
         }
         if not self.check_new_page():
             self.ln(20)
@@ -516,10 +511,10 @@ class BinaryDocumenting(FPDF):
                       "  2.  Removed {} outliers with {}\n"
                       "  3.  Imputed {} missing values with {}\n"
                       "  4.  Removed {} columns with constant values\n"
-                      .format(self.p.dataProcessor.removedDuplicateColumns, self.p.dataProcessor.removedDuplicateRows,
-                              self.p.dataProcessor.removedOutliers, self.p.dataProcessor.outlier_removal,
-                              self.p.dataProcessor.imputedMissingValues, self.p.dataProcessor.missing_values,
-                              self.p.dataProcessor.removedConstantColumns))
+                      .format(self.p.dataProcesser.removedDuplicateColumns, self.p.dataProcesser.removedDuplicateRows,
+                              self.p.dataProcesser.removedOutliers, self.p.dataProcesser.outlier_removal,
+                              self.p.dataProcesser.imputedMissingValues, self.p.dataProcesser.missing_values,
+                              self.p.dataProcesser.removedConstantColumns))
 
     def score_board(self):
         if not self.check_new_page():
