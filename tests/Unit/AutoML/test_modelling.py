@@ -2,7 +2,7 @@ import unittest
 import pandas as pd
 from sklearn.datasets import make_classification
 from sklearn.datasets import make_regression
-from Amplo.AutoML import Modelling
+from Amplo.AutoML import Modeller
 
 
 class TestModelling(unittest.TestCase):
@@ -15,7 +15,7 @@ class TestModelling(unittest.TestCase):
         cls.rx, cls.ry = pd.DataFrame(x), pd.Series(y)
 
     def test_regression(self):
-        mod = Modelling(mode='regression', objective='r2', folder='tmp/')
+        mod = Modeller(mode='regression', objective='r2', folder='tmp/')
         mod.fit(self.rx, self.ry)
         # Tests
         assert not mod.needsProba, 'R2 does not need probability'
@@ -32,7 +32,7 @@ class TestModelling(unittest.TestCase):
         assert 'params' in mod.results.keys()
 
     def test_classification(self):
-        mod = Modelling(mode='classification', objective='neg_log_loss', folder='tmp/')
+        mod = Modeller(mode='classification', objective='neg_log_loss', folder='tmp/')
         mod.fit(self.cx, self.cy)
         # Tests
         assert mod.needsProba, 'Neg Log Loss does not need probability'
@@ -49,7 +49,7 @@ class TestModelling(unittest.TestCase):
         assert 'params' in mod.results.keys()
 
     def test_return(self):
-        Modelling(mode='regression', samples=100).return_models()
-        Modelling(mode='regression', samples=100000).return_models()
-        Modelling(mode='classification', samples=100).return_models()
-        Modelling(mode='classification', samples=100000).return_models()
+        Modeller(mode='regression', samples=100).return_models()
+        Modeller(mode='regression', samples=100000).return_models()
+        Modeller(mode='classification', samples=100).return_models()
+        Modeller(mode='classification', samples=100000).return_models()

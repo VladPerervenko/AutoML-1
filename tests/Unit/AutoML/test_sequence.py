@@ -1,13 +1,13 @@
 import unittest
 import numpy as np
 import pandas as pd
-from Amplo.AutoML import Sequence
+from Amplo.AutoML import Sequencer
 
 
 class TestSequence(unittest.TestCase):
 
     def test_init(self):
-        assert Sequence(), 'Class initiation failed'
+        assert Sequencer(), 'Class initiation failed'
 
     def test_numpy_none(self):
         # Parameters
@@ -19,7 +19,7 @@ class TestSequence(unittest.TestCase):
         # Iterate scenarios
         for forward in [[1], [5]]:
             # Sequence
-            sequence = Sequence(back=back, forward=forward)
+            sequence = Sequencer(back=back, forward=forward)
             seq_x, seq_y = sequence.convert(x, y, flat=False)
 
             # Test
@@ -42,7 +42,7 @@ class TestSequence(unittest.TestCase):
         # Iterate Scenarios
         for forward in [[1], [5]]:
             # Sequence
-            sequence = Sequence(back=back, forward=forward, diff='diff')
+            sequence = Sequencer(back=back, forward=forward, diff='diff')
             seq_x, seq_y = sequence.convert(x, y, flat=False)
 
             # Tests
@@ -64,7 +64,7 @@ class TestSequence(unittest.TestCase):
         # Iterate Scenarios
         for forward in [[1], [5]]:
             # Sequence
-            sequence = Sequence(back=back, forward=forward, diff='log_diff')
+            sequence = Sequencer(back=back, forward=forward, diff='log_diff')
             seq_x, seq_y = sequence.convert(x, y, flat=False)
 
             # Tests
@@ -88,7 +88,7 @@ class TestSequence(unittest.TestCase):
         y = np.linspace(1, length, length)
 
         # Without differencing
-        sequence = Sequence(back=back, forward=forward, diff='none')
+        sequence = Sequencer(back=back, forward=forward, diff='none')
         seq_x, seq_y = sequence.convert(x, y, flat=False)
         # Test
         assert seq_x.shape[0] == seq_y.shape[0], 'seq_x and seq_y have inconsistent samples'
@@ -99,7 +99,7 @@ class TestSequence(unittest.TestCase):
                                ), 'seq_y samples are not correct'
 
         # With differencing
-        sequence = Sequence(back=back, forward=forward, diff='diff')
+        sequence = Sequencer(back=back, forward=forward, diff='diff')
         seq_x, seq_y = sequence.convert(x, y, flat=False)
         revert = sequence.revert(seq_y, y[back - 1:back - 1 + max(forward)])
         # Tests
@@ -107,7 +107,6 @@ class TestSequence(unittest.TestCase):
         assert seq_y.shape[1] == 2, 'seq_y has incorrect steps'
         assert np.allclose(revert[0, :forward[0] - forward[-1]], y[back - 1: forward[0] - forward[1]])
         assert np.allclose(revert[1], y[back - 1:])
-
 
     def test_pandas_tensor(self):
         # Parameters
@@ -120,7 +119,7 @@ class TestSequence(unittest.TestCase):
         # Iterate scenarios
         for forward in [[1], [5]]:
             # Sequence
-            sequence = Sequence(back=back, forward=forward)
+            sequence = Sequencer(back=back, forward=forward)
             seq_x, seq_y = sequence.convert(x, y, flat=False)
 
             # Tests
@@ -144,7 +143,7 @@ class TestSequence(unittest.TestCase):
         # Iterate scenarios
         for diff in ['diff', 'log_diff']:
             # Sequence
-            seq = Sequence(back=back, forward=forward, diff=diff)
+            seq = Sequencer(back=back, forward=forward, diff=diff)
             seq_x, seq_y = seq.convert(x, y, flat=False)
 
             # Tests
