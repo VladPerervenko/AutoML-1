@@ -115,7 +115,6 @@ class DataProcesser:
 
         # Finish
         self.is_fitted = True
-        self._store(data)
         print('[AutoML] Processing completed, ({} x {}) samples returned'.format(len(data), len(data.keys())))
         return data
 
@@ -364,10 +363,3 @@ class DataProcesser:
             data = data.fillna(data.mean())
 
         return data
-
-    def _store(self, data: pd.DataFrame) -> None:
-        """
-        Stores the cleaned data in a csv
-        """
-        # Store cleaned data
-        data.to_csv(self.folder + 'Cleaned_v{}.csv'.format(self.version), index_label='index')
