@@ -32,6 +32,7 @@ class BinaryDocumenting(FPDF):
         self.mName = None
         self.feature_set = None
         self.metrics = None
+        self.outputMetrics = None
         self.confusion_matrix = None
         self.cv = None
         self.x = None
@@ -165,12 +166,17 @@ class BinaryDocumenting(FPDF):
             'Precision': [np.mean(precision), np.std(precision)],
             'Sensitivity': [np.mean(sensitivity), np.std(sensitivity)],
             'Specificity': [np.mean(specificity), np.std(specificity)],
-            'F1 Score': [np.mean(f1_score), np.std(f1_score)]
+            'F1 Score': [np.mean(f1_score), np.std(f1_score)],
         }
         self.confusion_matrix = {
             'means': means,
             'stds': stds,
         }
+        self.outputMetrics = copy.deepcopy(self.metrics)
+        self.outputMetrics['True Positives'] = [means[0, 0], stds[0, 0]]
+        self.outputMetrics['False Positives'] = [means[0, 1], stds[0, 1]]
+        self.outputMetrics['False Negatives'] = [means[1, 0], stds[1, 0]]
+        self.outputMetrics['True Negatives'] = [means[1, 1], stds[1, 1]]
 
         # Print Results
         print('[AutoML] Accuracy:        {:.2f} \u00B1 {:.2f} %'.format(np.mean(accuracy), np.std(accuracy)))

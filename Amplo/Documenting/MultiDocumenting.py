@@ -46,6 +46,9 @@ class MultiDocumenting(BinaryDocumenting):
             'F1 Score': [np.mean(f1_score), np.std(f1_score)],
             'Accuracy': [np.mean(avg_acc), np.std(avg_acc)],
         }
+        self.outputMetrics = copy.deepcopy(self.metrics)
+        self.outputMetrics['Confusion Matrix Means'] = means
+        self.outputMetrics['Confusion Matrix Stds'] = stds
         self.confusion_matrix = {
             'means': means,
             'stds': stds,
