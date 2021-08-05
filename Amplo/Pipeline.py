@@ -40,21 +40,21 @@ class Pipeline:
                  target: str = '',
                  name: str = '',
                  version: str = None,
-                 mode: str = 'regression',
-                 objective: str = 'r2',
+                 mode: str = 'classification',
+                 objective: str = 'neg_log_loss',
 
                  # Data Processing
                  num_cols: list = None,
                  date_cols: list = None,
                  cat_cols: list = None,
-                 missing_values: str = 'interpolate',
+                 missing_values: str = 'zero',
                  outlier_removal: str = 'clip',
                  z_score_threshold: int = 4,
                  include_output: bool = False,
 
                  # Feature Processing
-                 max_lags: int = 10,
-                 max_diff: int = 2,
+                 max_lags: int = 0,
+                 max_diff: int = 0,
                  information_threshold: float = 0.99,
                  extract_features: bool = True,
                  feature_timeout: int = 3600,
@@ -255,7 +255,7 @@ class Pipeline:
         # Store Pipeline Settings
         args = locals()
         args.pop('self')
-        self.settings = {'pipeline': args}
+        self.settings = {'pipeline': args, 'validation': {}}
 
     def _set_flags(self):
         if self.plotEDA is None:
@@ -1017,6 +1017,9 @@ class Pipeline:
         else:
             raise ValueError('Unknown mode.')
         documenting.create(model, feature_set)
+
+        # Append to settings
+        self.settings['validation']['{}_{}'.format(type(model).__name__, feature_set)] = documenting.outputMetrics
 
     def _prepare_production_files(self, model=None, feature_set: str = None, params: dict = None):
         """
