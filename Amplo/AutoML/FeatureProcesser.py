@@ -271,9 +271,9 @@ class FeatureProcesser:
         self.laggedFeatures = settings['laggedFeatures']
         self.diffFeatures = settings['diffFeatures']
         self.featureSets = settings['featureSets']
-        self._means = settings['_means']
-        self._stds = settings['_stds']
-        self._centers = settings['_centers']
+        self._means = pd.read_json(settings['_means'])
+        self._stds = pd.read_json(settings['_stds'])
+        self._centers = pd.read_json(settings['_centers'])
         self.is_fitted = True
 
     def _clean_set(self, x: pd.DataFrame, y: pd.Series) -> None:
