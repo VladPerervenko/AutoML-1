@@ -181,7 +181,7 @@ class BinaryDocumenting(FPDF):
         # Print Results
         print('[AutoML] Accuracy:        {:.2f} \u00B1 {:.2f} %'.format(np.mean(accuracy), np.std(accuracy)))
         print('[AutoML] Precision:       {:.2f} \u00B1 {:.2f} %'.format(np.mean(precision), np.std(precision)))
-        print('[AutoML] Recall:          {:.2f} \u00B1 {:.2f} %'.format(
+        print('[AutoML] Sensitivity:          {:.2f} \u00B1 {:.2f} %'.format(
             np.mean(sensitivity), np.std(sensitivity)))
         print('[AutoML] Specificity:     {:.2f} \u00B1 {:.2f} %'.format(
             np.mean(specificity), np.std(specificity)))
