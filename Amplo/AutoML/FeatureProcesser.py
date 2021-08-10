@@ -162,6 +162,8 @@ class FeatureProcesser:
         required += list(itertools.chain.from_iterable([s[5:] for s in inverse_features]))
         required += list(itertools.chain.from_iterable([s.split('__diff__')[0] for s in diff_features]))
         required += list(itertools.chain.from_iterable([s.split('__lag__')[0] for s in lag_features]))
+        if len(k_means_features) != 0:
+            required += list(self._centers.keys())
 
         # Remove duplicates from required
         required = list(set(required))
@@ -273,7 +275,7 @@ class FeatureProcesser:
         self.featureSets = settings['featureSets']
         self._means = pd.read_json(settings['_means'], typ='series')
         self._stds = pd.read_json(settings['_stds'], typ='series')
-        self._centers = pd.read_json(settings['_centers'], typ='series')
+        self._centers = pd.read_json(settings['_centers'])
         self.is_fitted = True
 
     def _clean_set(self, x: pd.DataFrame, y: pd.Series) -> None:
