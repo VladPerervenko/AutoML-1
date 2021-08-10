@@ -136,7 +136,7 @@ class DataProcesser:
         data = clean_keys(data)
 
         # Remove duplicates
-        data = self.remove_duplicates(data)
+        data = self.remove_duplicates(data, rows=False)
 
         # Convert data types
         data = self.convert_data_types(data, fit_categorical=False)
@@ -164,7 +164,7 @@ class DataProcesser:
             '_means': None if self._means is None else self._means.to_json(),
             '_stds': None if self._stds is None else self._stds.to_json(),
             '_q1': None if self._q1 is None else self._q1.to_json(),
-            '_q3': None if self._q3 is None else self._q1.to_json(),
+            '_q3': None if self._q3 is None else self._q3.to_json(),
             'dummies': self.dummies
         }
 
@@ -236,7 +236,7 @@ class DataProcesser:
             data = data.drop(key, axis=1)
         return data
 
-    def remove_duplicates(self, data: pd.DataFrame) -> pd.DataFrame:
+    def remove_duplicates(self, data: pd.DataFrame, rows: bool = True) -> pd.DataFrame:
         """
         Removes duplicate columns and rows.
 
@@ -252,7 +252,8 @@ class DataProcesser:
         rows, columns = len(data), len(data.keys())
 
         # Remove Duplicates
-        data = data.drop_duplicates()
+        if rows:
+            data = data.drop_duplicates()
         data = data.loc[:, ~data.columns.duplicated()]
 
         # Note
