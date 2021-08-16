@@ -89,7 +89,8 @@ class Pipeline:
                  plot_eda: bool = True,
                  process_data: bool = True,
                  document_results: bool = True,
-                 verbose: int = 1):
+                 verbose: int = 1,
+                 no_dirs: bool = False):
         """
         Automated Machine Learning Pipeline for tabular data.
         Designed for predictive maintenance applications, failure identification, failure prediction, condition
@@ -234,7 +235,8 @@ class Pipeline:
         self._set_flags()
 
         # Create Directories
-        self._create_dirs()
+        if not no_dirs:
+            self._create_dirs()
 
         # Load Version
         self._load_version()
