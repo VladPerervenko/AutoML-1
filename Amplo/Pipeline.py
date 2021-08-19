@@ -234,18 +234,18 @@ class Pipeline:
         # Flags
         self._set_flags()
 
-        # Create Directories
         if not no_dirs:
+            print('exec')
+            # Create Directories
             self._create_dirs()
 
-        # Load Version
-        self._load_version()
+            # Load Version
+            self._load_version()
 
         # Required sub-classes
         self.dataProcesser = DataProcesser(target=self.target, num_cols=self.numCols, date_cols=self.dateCols,
                                            cat_cols=self.catCols, missing_values=self.missingValues,
-                                           outlier_removal=self.outlierRemoval, z_score_threshold=self.zScoreThreshold,
-                                           folder=self.mainDir + 'Data/')
+                                           outlier_removal=self.outlierRemoval, z_score_threshold=self.zScoreThreshold)
         self.dataSampler = DataSampler(method='both', margin=0.1, cv_splits=self.cvSplits, shuffle=self.shuffle,
                                        fast_run=False, objective=self.objective)
         self.dataSequencer = Sequencer(back=self.sequenceBack, forward=self.sequenceForward,

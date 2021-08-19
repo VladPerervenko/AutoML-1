@@ -1,5 +1,4 @@
 import re
-import os
 import warnings
 import numpy as np
 import pandas as pd
@@ -17,7 +16,6 @@ class DataProcesser:
                  missing_values: str = 'interpolate',
                  outlier_removal: str = 'clip',
                  z_score_threshold: int = 4,
-                 folder: str = '',
                  version: int = 1,
                  ):
         """
@@ -45,11 +43,6 @@ class DataProcesser:
         out_rem_algo = ['quantiles', 'z-score', 'clip', 'none']
         assert outlier_removal in out_rem_algo, \
             'Outlier Removal algorithm not implemented, pick from {}'.format(', '.join(out_rem_algo))
-
-        # Make Folder
-        self.folder = folder if len(folder) == 0 or folder[-1] == '/' else folder + '/'
-        if len(self.folder) != 0 and not os.path.exists(self.folder):
-            os.makedirs(self.folder)
 
         # Arguments
         self.version = version
@@ -249,7 +242,7 @@ class DataProcesser:
         data [pd.DataFrame]: Cleaned input data
         """
         # Note down
-        rows, columns = len(data), len(data.keys())
+        n_rows, n_columns = len(data), len(data.keys())
 
         # Remove Duplicates
         if rows:
@@ -257,8 +250,8 @@ class DataProcesser:
         data = data.loc[:, ~data.columns.duplicated()]
 
         # Note
-        self.removedDuplicateColumns = len(data.keys()) - columns
-        self.removedDuplicateRows = len(data) - rows
+        self.removedDuplicateColumns = len(data.keys()) - n_columns
+        self.removedDuplicateRows = len(data) - n_rows
 
         return data
 
