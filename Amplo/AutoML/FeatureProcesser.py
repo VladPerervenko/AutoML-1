@@ -69,7 +69,7 @@ class FeatureProcesser:
         self.model = None
         self.mode = mode
         self.timeout = timeout
-        self.date_cols = date_cols
+        self.date_cols = [] if date_cols is None else date_cols
 
         # Register
         self.is_fitted = False
@@ -196,8 +196,8 @@ class FeatureProcesser:
         for k in missing_keys:
             data.loc[:, k] = np.zeros(len(data))
 
-        # Start Output with selected original features
-        self.x = data[original_features]
+        # Set output
+        self.x = data
 
         # Linear features
         self._add_linear_features()
