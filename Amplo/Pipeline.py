@@ -47,14 +47,14 @@ class Pipeline:
                  num_cols: list = None,
                  date_cols: list = None,
                  cat_cols: list = None,
-                 missing_values: str = 'interpolate',
+                 missing_values: str = 'zero',
                  outlier_removal: str = 'clip',
                  z_score_threshold: int = 4,
                  include_output: bool = False,
 
                  # Feature Processing
-                 max_lags: int = 10,
-                 max_diff: int = 2,
+                 max_lags: int = 0,
+                 max_diff: int = 0,
                  information_threshold: float = 0.99,
                  extract_features: bool = True,
                  feature_timeout: int = 3600,
@@ -83,12 +83,14 @@ class Pipeline:
                  stacking: bool = False,
 
                  # Production
-                 custom_code: str = '',
+                 custom_function: str = None,
+
                  # Flags
                  plot_eda: bool = True,
                  process_data: bool = True,
                  document_results: bool = True,
-                 verbose: int = 1):
+                 verbose: int = 1,
+                 no_dirs: bool = False):
         """
         Automated Machine Learning Pipeline for tabular data.
         Designed for predictive maintenance applications, failure identification, failure prediction, condition
@@ -133,7 +135,8 @@ class Pipeline:
         grid_search_candidates : Parameter evaluation budget for grid search
         grid_search_iterations : Model evaluation budget for grid search
         stacking [bool]: Whether to create a stacking model at the end
-        custom_code [str]: Add custom code for the prediction function, useful for production
+        custom_code [str]: Add custom code for the prediction function, useful for production. Will be executed with
+        exec, can be multiline. Uses data as input.
         plot_eda [bool]: Whether or not to run Exploratory Data Analysis
         process_data [bool]: Whether or not to force data processing
         document_results [bool]: Whether or not to force documenting
@@ -147,7 +150,7 @@ class Pipeline:
         self.mainDir = 'AutoML/'
         self.target = re.sub('[^a-z0-9]', '_', target.lower())
         self.verbose = verbose
-        self.customCode = custom_code
+        self.customFunction = custom_function
         self.name = name
 
         # Checks
@@ -228,17 +231,18 @@ class Pipeline:
         # Flags
         self._set_flags()
 
-        # Create Directories
-        self._create_dirs()
+        if not no_dirs:
+            print('exec')
+            # Create Directories
+            self._create_dirs()
 
-        # Load Version
-        self._load_version()
+            # Load Version
+            self._load_version()
 
         # Required sub-classes
         self.dataProcesser = DataProcesser(target=self.target, num_cols=self.numCols, date_cols=self.dateCols,
                                            cat_cols=self.catCols, missing_values=self.missingValues,
-                                           outlier_removal=self.outlierRemoval, z_score_threshold=self.zScoreThreshold,
-                                           folder=self.mainDir + 'Data/')
+                                           outlier_removal=self.outlierRemoval, z_score_threshold=self.zScoreThreshold)
         self.dataSampler = DataSampler(method='both', margin=0.1, cv_splits=self.cvSplits, shuffle=self.shuffle,
                                        fast_run=False, objective=self.objective)
         self.dataSequencer = Sequencer(back=self.sequenceBack, forward=self.sequenceForward,
@@ -250,7 +254,7 @@ class Pipeline:
         # Store Pipeline Settings
         args = locals()
         args.pop('self')
-        self.settings = {'pipeline': args}
+        self.settings = {'pipeline': args, 'validation': {}}
 
     def _set_flags(self):
         if self.plotEDA is None:
@@ -1041,6 +1045,9 @@ class Pipeline:
             raise ValueError('Unknown mode.')
         documenting.create(model, feature_set)
 
+        # Append to settings
+        self.settings['validation']['{}_{}'.format(type(model).__name__, feature_set)] = documenting.outputMetrics
+
     def _prepare_production_files(self, model=None, feature_set: str = None, params: dict = None):
         """
         Prepares files necessary to deploy a specific model / feature set combination.
@@ -1192,6 +1199,10 @@ class Pipeline:
         if self.verbose > 0:
             print('[AutoML] Predicting with {}, v{}'.format(type(self.bestModel).__name__, self.version))
 
+        # Custom code
+        if self.customFunction is not None:
+            exec(self.customFunction)
+
         # Convert
         x, y = self.convert_data(data)
 
@@ -1216,6 +1227,10 @@ class Pipeline:
         assert self.mode == 'classification', 'Predict_proba only available for classification'
         assert hasattr(self.bestModel, 'predict_proba'), '{} has no attribute predict_proba'.format(
             type(self.bestModel).__name__)
+
+        # Custom code
+        if self.customFunction is not None:
+            exec(self.customFunction)
 
         # Print
         if self.verbose > 0:

@@ -22,6 +22,9 @@ class TestPipeline(unittest.TestCase):
         cls.r_data = pd.DataFrame(x, columns=['Feature_{}'.format(i) for i in range(x.shape[1])])
         cls.r_data['target'] = y
 
+    def test_no_dirs(self):
+        pipeline = Pipeline(no_dirs=True)
+
     def test_regression(self):
         if os.path.exists('AutoML'):
             shutil.rmtree('AutoML')

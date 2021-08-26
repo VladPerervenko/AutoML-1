@@ -59,6 +59,7 @@ class RegressionDocumenting(BinaryDocumenting):
             'Max Error': [np.mean(max_error), np.std(max_error)],
             'Mean Relative Error': [np.mean(rel_error), np.std(rel_error)],
         }
+        self.outputMetrics = copy.deepcopy(self.metrics)
 
         # Save figure
         ax[i // 2][i % 2].legend(['Output', 'Prediction'])

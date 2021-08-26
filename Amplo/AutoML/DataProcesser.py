@@ -1,5 +1,4 @@
 import re
-import os
 import warnings
 import numpy as np
 import pandas as pd
@@ -17,7 +16,6 @@ class DataProcesser:
                  missing_values: str = 'interpolate',
                  outlier_removal: str = 'clip',
                  z_score_threshold: int = 4,
-                 folder: str = '',
                  version: int = 1,
                  ):
         """
@@ -45,11 +43,6 @@ class DataProcesser:
         out_rem_algo = ['quantiles', 'z-score', 'clip', 'none']
         assert outlier_removal in out_rem_algo, \
             'Outlier Removal algorithm not implemented, pick from {}'.format(', '.join(out_rem_algo))
-
-        # Make Folder
-        self.folder = folder if len(folder) == 0 or folder[-1] == '/' else folder + '/'
-        if len(self.folder) != 0 and not os.path.exists(self.folder):
-            os.makedirs(self.folder)
 
         # Arguments
         self.version = version
@@ -139,7 +132,7 @@ class DataProcesser:
         data = clean_keys(data)
 
         # Remove duplicates
-        data = self.remove_duplicates(data)
+        data = self.remove_duplicates(data, rows=False)
 
         # Convert data types
         data = self.convert_data_types(data, fit_categorical=False)
@@ -167,7 +160,7 @@ class DataProcesser:
             '_means': None if self._means is None else self._means.to_json(),
             '_stds': None if self._stds is None else self._stds.to_json(),
             '_q1': None if self._q1 is None else self._q1.to_json(),
-            '_q3': None if self._q3 is None else self._q1.to_json(),
+            '_q3': None if self._q3 is None else self._q3.to_json(),
             'dummies': self.dummies
         }
 
@@ -259,7 +252,7 @@ class DataProcesser:
             data = data.drop(key, axis=1)
         return data
 
-    def remove_duplicates(self, data: pd.DataFrame) -> pd.DataFrame:
+    def remove_duplicates(self, data: pd.DataFrame, rows: bool = True) -> pd.DataFrame:
         """
         Removes duplicate columns and rows.
 
@@ -272,15 +265,16 @@ class DataProcesser:
         data [pd.DataFrame]: Cleaned input data
         """
         # Note down
-        rows, columns = len(data), len(data.keys())
+        n_rows, n_columns = len(data), len(data.keys())
 
         # Remove Duplicates
-        data = data.drop_duplicates()
+        if rows:
+            data = data.drop_duplicates()
         data = data.loc[:, ~data.columns.duplicated()]
 
         # Note
-        self.removedDuplicateColumns = len(data.keys()) - columns
-        self.removedDuplicateRows = len(data) - rows
+        self.removedDuplicateColumns = len(data.keys()) - n_columns
+        self.removedDuplicateRows = len(data) - n_rows
 
         return data
 
