@@ -6,13 +6,14 @@ from ..Utils import clean_keys
 
 
 class DataProcesser:
-    # todo implement data type detector
 
     def __init__(self,
                  target: str = None,
                  num_cols: list = None,
                  date_cols: list = None,
                  cat_cols: list = None,
+                 mode: str = 'regression',
+                 include_output: bool = False,
                  missing_values: str = 'interpolate',
                  outlier_removal: str = 'clip',
                  z_score_threshold: int = 4,
@@ -46,6 +47,8 @@ class DataProcesser:
 
         # Arguments
         self.version = version
+        self.mode = mode
+        self.includeOutput = include_output
         self.target = target if target is None else re.sub("[^a-z0-9]", '_', target.lower())
         self.num_cols = [] if num_cols is None else [re.sub('[^a-z0-9]', '_', nc.lower()) for nc in num_cols]
         self.cat_cols = [] if cat_cols is None else [re.sub('[^a-z0-9]', '_', cc.lower()) for cc in cat_cols]
@@ -95,7 +98,7 @@ class DataProcesser:
         data = self.remove_duplicates(data)
 
         # Infer data-types
-        data = self.infer_data_types(data)
+        self.infer_data_types(data)
 
         # Convert data types
         data = self.convert_data_types(data, fit_categorical=True)
@@ -108,6 +111,9 @@ class DataProcesser:
 
         # Remove Constants
         data = self.remove_constants(data)
+
+        # Clean target
+        data = self.clean_target(data)
 
         # Finish
         self.is_fitted = True
@@ -189,6 +195,10 @@ class DataProcesser:
             # First cleanup
             data = data.infer_objects()
 
+            # Remove target from columns
+            if not self.includeOutput:
+                data = data.drop(self.target, axis=1)
+
             # All numeric are easy
             self.num_cols = data.keys()[data.dtypes == float].tolist()
 
@@ -199,7 +209,11 @@ class DataProcesser:
             self.date_cols = object_keys[object_is_date].tolist()
             self.cat_cols = object_keys[~object_is_date].tolist()
 
-        return data
+            # Print
+            print(f"[AutoML] Found {len(self.num_cols)} numerical, {len(self.cat_cols)} categorical and "
+                  f"{len(self.date_cols)} datetime columns")
+
+        return
 
     def convert_data_types(self, data: pd.DataFrame, fit_categorical: bool = True) -> pd.DataFrame:
         """
@@ -379,5 +393,19 @@ class DataProcesser:
         # Fill missing values with column mean
         elif self.missing_values == 'mean':
             data = data.fillna(data.mean())
+
+        return data
+
+    def clean_target(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Cleans the target column -- missing values already done, just converting classification classes
+        """
+        if self.target in data and self.mode == 'classification':
+            if data[self.target].dtype == object:
+                data[self.target] = data[self.target].astype('categorical').cat.codes
+
+            else:
+                # todo ensure that classes are 0, 1, ...
+
 
         return data
