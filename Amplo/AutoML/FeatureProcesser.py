@@ -20,6 +20,7 @@ class FeatureProcesser:
     def __init__(self,
                  max_lags: int = 10,
                  max_diff: int = 2,
+                 date_cols: list = None,
                  information_threshold: float = 0.99,
                  extract_features: bool = True,
                  mode: str = 'classification',
@@ -46,6 +47,7 @@ class FeatureProcesser:
         ----------
         max_lags [int]: Maximum lags for lagged features to analyse
         max_diff [int]: Maximum differencing order for differencing features
+        date_cols [list[str]]: List of datetime columns, for datetime features
         information_threshold [float]: Information threshold for co-linear features
         extract_features [bool]: Whether or not to extract features
         folder [str]: Parent folder for results
@@ -67,6 +69,7 @@ class FeatureProcesser:
         self.model = None
         self.mode = mode
         self.timeout = timeout
+        self.date_cols = date_cols
 
         # Register
         self.is_fitted = False
@@ -79,6 +82,7 @@ class FeatureProcesser:
         self.kMeansFeatures = []
         self.laggedFeatures = []
         self.diffFeatures = []
+        self.datetimeFeatures = []
         self.featureSets = {}
         self._means = None
         self._stds = None
@@ -113,11 +117,26 @@ class FeatureProcesser:
         # Extract
         if self.extractFeatures:
             self._calc_baseline()
+
+            self._fit_datetime_features()
+            self._add_datetime_features()
+
+            self._fit_cross_features()
             self._add_cross_features()
+
+            self._fit_k_means_features()
             self._add_k_means_features()
+
+            self._fit_trigonometry_features()
             self._add_trigonometry_features()
+
+            self._fit_inverse_features()
             self._add_inverse_features()
+
+            self._fit_diff_features()
             self._add_diff_features()
+
+            self._fit_lagged_features()
             self._add_lagged_features()
 
         # Select
@@ -145,24 +164,26 @@ class FeatureProcesser:
 
         # Get original features
         features = self.featureSets[feature_set]
-        linear_features = [k for k in features if '__sub__' in k or '__add__' in k]
-        cross_features = [k for k in features if '__x__' in k or '__d__' in k]
-        trigonometric_features = [k for k in features if 'sin__' in k or 'cos__' in k]
-        inverse_features = [k for k in features if 'inv__' in k]
-        k_means_features = [k for k in features if 'dist__' in k]
-        diff_features = [k for k in features if '__diff__' in k]
-        lag_features = [k for k in features if '__lag__' in k]
+        self.linearFeatures = [k for k in features if '__sub__' in k or '__add__' in k]
+        self.crossFeatures = [k for k in features if '__x__' in k or '__d__' in k]
+        self.trigonometricFeatures = [k for k in features if 'sin__' in k or 'cos__' in k]
+        self.inverseFeatures = [k for k in features if 'inv__' in k]
+        self.kMeansFeatures = [k for k in features if 'dist__' in k]
+        self.diffFeatures = [k for k in features if '__diff__' in k]
+        self.laggedFeatures = [k for k in features if '__lag__' in k]
+        self.datetimeFeatures = [k for k in features if '__dt__' in k]
         original_features = [k for k in features if '__' not in k]
 
         # Fill missing features for normalization
         required = copy.copy(original_features)
-        required += list(itertools.chain.from_iterable([s.split('__')[::2] for s in cross_features]))
-        required += list(itertools.chain.from_iterable([s.split('__')[::2] for s in linear_features]))
-        required += list(itertools.chain.from_iterable([s.split('__')[1] for s in trigonometric_features]))
-        required += list(itertools.chain.from_iterable([s[5:] for s in inverse_features]))
-        required += list(itertools.chain.from_iterable([s.split('__diff__')[0] for s in diff_features]))
-        required += list(itertools.chain.from_iterable([s.split('__lag__')[0] for s in lag_features]))
-        if len(k_means_features) != 0:
+        required += list(itertools.chain.from_iterable([s.split('__')[::2] for s in self.linearFeatures]))
+        required += list(itertools.chain.from_iterable([s.split('__')[::2] for s in self.crossFeatures]))
+        required += list(itertools.chain.from_iterable([s.split('__')[1] for s in self.trigonometricFeatures]))
+        required += list(itertools.chain.from_iterable([s[5:] for s in self.inverseFeatures]))
+        required += list(itertools.chain.from_iterable([s.split('__diff__')[0] for s in self.diffFeatures]))
+        required += list(itertools.chain.from_iterable([s.split('__lag__')[0] for s in self.laggedFeatures]))
+        required += list(itertools.chain.from_iterable([s.split('__dt__')[0] for s in self.datetimeFeatures]))
+        if len(self.kMeansFeatures) != 0:
             required += list(self._centers.keys())
 
         # Remove duplicates from required
@@ -171,76 +192,44 @@ class FeatureProcesser:
         # Impute missing keys
         missing_keys = [k for k in required if k not in data.keys()]
         if len(missing_keys) > 0:
-            warnings.warn('Imputing {} keys'.format(len(missing_keys)))
+            warnings.warn('[Feature Extraction] Imputing {} keys'.format(len(missing_keys)))
         for k in missing_keys:
             data.loc[:, k] = np.zeros(len(data))
 
         # Start Output with selected original features
-        x = data[original_features]
-
-        # Multiplicative features
-        for key in cross_features:
-            if '__x__' in key:
-                key_a, key_b = key.split('__x__')
-                feature = data[key_a] * data[key_b]
-                x.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
-            else:
-                key_a, key_b = key.split('__d__')
-                feature = data[key_a] / data[key_b]
-                x.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
+        self.x = data[original_features]
 
         # Linear features
-        for key in linear_features:
-            if '__sub__' in key:
-                key_a, key_b = key.split('__sub__')
-                feature = data[key_a] - data[key_b]
-                x.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
-            else:
-                key_a, key_b = key.split('__add__')
-                feature = data[key_a] + data[key_b]
-                x.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
+        self._add_linear_features()
+
+        # Cross features
+        self._add_cross_features()
+
+        # Datetime features
+        self._add_datetime_features()
 
         # Differentiated features
-        for k in diff_features:
-            key, diff = k.split('__diff__')
-            feature = data[key]
-            for i in range(1, int(diff)):
-                feature = feature.diff().fillna(0)
-            x.loc[:, k] = feature
+        self._add_diff_features()
 
         # K-Means features
-        if len(k_means_features) != 0:
-            temp = copy.deepcopy(data.loc[:, self._centers.keys()])
-            # Normalize
-            temp -= self._means
-            temp /= self._stds
-            # Calculate centers
-            for key in self.kMeansFeatures:
-                ind = int(key[key.find('dist__') + 6: key.rfind('_')])
-                x.loc[:, key] = np.sqrt(np.square(temp - self._centers.iloc[ind]).sum(axis=1))
+        self._add_k_means_features()
 
         # Lagged features
-        for k in lag_features:
-            key, lag = k.split('__lag__')
-            x.loc[:, k] = data[key].shift(-int(lag), fill_value=0)
+        self._add_lagged_features()
 
         # Trigonometric features
-        for k in trigonometric_features:
-            func, key = k.split('__')
-            x.loc[:, k] = getattr(np, func)(data[key])
+        self._add_trigonometry_features()
 
         # Inverse Features
-        for k in inverse_features:
-            key = k[5:]
-            x.loc[:, k] = 1 / data[key]
+        self._add_inverse_features()
 
         # Enforce the right order of features
-        x = x[features]
+        self.x = self.x[features]
 
         # And clip everything (we do this with all features in ._analyse_feature(), no exception)
-        x = x.astype('float32').clip(lower=1e-12, upper=1e12).fillna(0)
+        self.x = self.x.astype('float32').clip(lower=1e-12, upper=1e12).fillna(0)
 
-        return x
+        return self.x
 
     def get_settings(self) -> dict:
         """
@@ -398,9 +387,45 @@ class FeatureProcesser:
             print('[AutoML] Removed {} Co-Linear features ({:.3f} %% threshold)'
                   .format(len(self.coLinearFeatures), self.informationThreshold))
 
-    def _add_cross_features(self):
+    # Start Feature functions
+    def _fit_datetime_features(self):
         """
-        Calculates cross-feature features with m and multiplication.
+        Finds interesting datetime features
+        """
+        if self.verbosity > 0:
+            print('[AutoML] Analysing datetime features')
+        scores = {}
+
+        # Analyse datetime features
+        for key in self.date_cols:
+            scores[f"{key}__dt__dayofyear"] = self.x[key].dt.dayofyear
+            scores[f"{key}__dt__dayofweek"] = self.x[key].dt.dayofweek
+            scores[f"{key}__dt__quarter"] = self.x[key].dt.quarter
+            scores[f"{key}__dt__month"] = self.x[key].dt.month
+            scores[f"{key}__dt__week"] = self.x[key].dt.week
+            scores[f"{key}__dt__hour"] = self.x[key].dt.hour
+            scores[f"{key}__dt__minute"] = self.x[key].dt.minute
+            scores[f"{key}__dt__second"] = self.x[key].dt.second
+
+        # Select valuable features
+        self.datetimeFeatures = self._select_features(scores)
+
+    def _add_datetime_features(self):
+        """
+        Calculates various datetime features.
+        """
+        # Add features
+        for k in self.datetimeFeatures:
+            key, _, period = k.split('__')
+            self.x[k] = getattr(self.x[key].dt, period).clip(lower=1e-12, upper=1e12).fillna(0)
+
+        # Print result
+        if self.verbosity > 0:
+            print('[AutoML] Added {} datetime features'.format(len(self.datetimeFeatures)))
+
+    def _fit_cross_features(self):
+        """
+        Analyses cross-features --> division and multiplication
         Should be limited to say ~500.000 features (runs about 100-150 features / second)
         """
         if self.verbosity > 0:
@@ -446,6 +471,10 @@ class FeatureProcesser:
         # Select valuable features
         self.crossFeatures = self._select_features(scores)
 
+    def _add_cross_features(self):
+        """
+        Adds all selected cross features
+        """
         # Add features
         for k in self.crossFeatures:
             if '__x__' in k:
@@ -461,7 +490,7 @@ class FeatureProcesser:
         if self.verbosity > 0:
             print('[AutoML] Added {} cross features'.format(len(self.crossFeatures)))
 
-    def _add_trigonometry_features(self):
+    def _fit_trigonometry_features(self):
         """
         Calculates trigonometry features with sinus, cosines
         """
@@ -485,6 +514,10 @@ class FeatureProcesser:
         # Select valuable features
         self.trigonometricFeatures = self._select_features(scores)
 
+    def _add_trigonometry_features(self):
+        """
+        Adds selected trigonometry features with sinus, cosines
+        """
         # Add features
         for k in self.trigonometricFeatures:
             func, key = k.split('__')
@@ -494,9 +527,9 @@ class FeatureProcesser:
         if self.verbosity > 0:
             print('[AutoML] Added {} trigonometric features'.format(len(self.trigonometricFeatures)))
 
-    def _add_linear_features(self):
+    def _fit_linear_features(self):
         """
-        Calculates simple additive and subtractive features
+        Analyses simple additive and subtractive features
         """
         # Load if available
         if self.verbosity > 0:
@@ -539,6 +572,10 @@ class FeatureProcesser:
         # Select valuable Features
         self.linearFeatures = self._select_features(scores)
 
+    def _add_linear_features(self):
+        """
+        Adds selected additive and subtractive features
+        """
         # Add features
         for key in self.linearFeatures:
             if '__sub__' in key:
@@ -554,9 +591,9 @@ class FeatureProcesser:
         if self.verbosity > 0:
             print('[AutoML] Added {} additive features'.format(len(self.linearFeatures)))
 
-    def _add_inverse_features(self):
+    def _fit_inverse_features(self):
         """
-        Calculates inverse features.
+        Analyses inverse features.
         """
         if self.verbosity > 0:
             print('[AutoML] Analysing Inverse Features')
@@ -570,6 +607,10 @@ class FeatureProcesser:
 
         self.inverseFeatures = self._select_features(scores)
 
+    def _add_inverse_features(self):
+        """
+        Fits inverse features.
+        """
         # Add features
         for k in self.inverseFeatures:
             key = k[5:]
@@ -579,7 +620,7 @@ class FeatureProcesser:
         if self.verbosity > 0:
             print('[AutoML] Added {} inverse features.'.format(len(self.inverseFeatures)))
 
-    def _add_k_means_features(self):
+    def _fit_k_means_features(self):
         """
         Analyses the correlation of k-means features.
         k-means is a clustering algorithm which clusters the data.
@@ -614,13 +655,25 @@ class FeatureProcesser:
 
         # Add the valuable features
         self.kMeansFeatures = self._select_features(scores)
-        for k in self.kMeansFeatures:
-            self.x[k] = distances[k]
+
+    def _add_k_means_features(self):
+        """
+        Adds the selected k-means features
+        """
+        # Normalize data
+        tmp = copy.deepcopy(self.x.loc[:, self._centers.keys()])
+        tmp -= self._means
+        tmp /= self._stds
+
+        # Calculate centers
+        for key in self.kMeansFeatures:
+            ind = int(key[key.find('dist__') + 6: key.rfind('_')])
+            self.x.loc[:, key] = np.sqrt(np.square(tmp - self._centers.iloc[ind]).sum(axis=1))
 
         if self.verbosity > 0:
-            print('[AutoML] Added {} K-Means features ({} clusters)'.format(len(self.kMeansFeatures), clusters))
+            print('[AutoML] Added {} K-Means features'.format(len(self.kMeansFeatures)))
 
-    def _add_diff_features(self):
+    def _fit_diff_features(self):
         """
         Analyses whether the diff signal of the data should be included.
         """
@@ -649,6 +702,10 @@ class FeatureProcesser:
         # Select the valuable features
         self.diffFeatures = self._select_features(scores)
 
+    def _add_diff_features(self):
+        """
+        Adds whether the diff signal of the data should be included.
+        """
         # Add Diff Features
         for k in self.diffFeatures:
             key, diff = k.split('__diff__')
@@ -661,7 +718,7 @@ class FeatureProcesser:
         if self.verbosity > 0:
             print('[AutoML] Added {} differenced features'.format(len(self.diffFeatures)))
 
-    def _add_lagged_features(self):
+    def _fit_lagged_features(self):
         """
         Analyses the correlation of lagged features (value of sensor_x at t-1 to predict target at t)
         """
@@ -686,6 +743,10 @@ class FeatureProcesser:
         # Select
         self.laggedFeatures = self._select_features(scores)
 
+    def _add_lagged_features(self):
+        """
+        Adds the correlation of lagged features (value of sensor_x at t-1 to predict target at t)
+        """
         # Add selected
         for k in self.laggedFeatures:
             key, lag = k.split('__lag__')
