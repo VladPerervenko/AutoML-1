@@ -40,8 +40,8 @@ class Pipeline:
                  target: str = '',
                  name: str = '',
                  version: str = None,
-                 mode: str = 'regression',
-                 objective: str = 'r2',
+                 mode: str = None,
+                 objective: str = None,
 
                  # Data Processing
                  num_cols: list = None,
@@ -70,7 +70,7 @@ class Pipeline:
                  # Initial Modelling
                  standardize: bool = False,
                  shuffle: bool = True,
-                 cv_splits: int = 3,
+                 cv_splits: int = 10,
                  store_models: bool = False,
 
                  # Grid Search
@@ -151,7 +151,8 @@ class Pipeline:
         self.name = name
 
         # Checks
-        assert mode == 'regression' or mode == 'classification', 'Supported modes: regression, classification.'
+        if mode is not None:
+            assert mode == 'regression' or mode == 'classification', 'Supported modes: regression, classification.'
         assert max_lags < 50, 'Max_lags too big. Max 50.'
         assert 0 < information_threshold < 1, 'Information threshold needs to be within [0, 1'
         assert max_diff < 5, 'Max diff too big. Max 5.'
@@ -162,20 +163,16 @@ class Pipeline:
         if include_output and not sequence:
             warnings.warn('[AutoML] IMPORTANT: strongly advices to not include output without sequencing.')
 
-        # Objective
+        # Objective & Scorer
+        self.scorer = None
         if objective is not None:
-            self.objective = objective
-        else:
-            if mode == 'regression':
-                self.objective = 'neg_mean_squared_error'
-            elif mode == 'classification':
-                self.objective = 'accuracy'
-        assert isinstance(objective, str), 'Objective needs to be a string, not type {}'.format(type(objective))
-        assert objective in metrics.SCORERS.keys(), 'Metric not supported, look at sklearn.metrics.SCORERS.keys()'
-        self.scorer = metrics.SCORERS[self.objective]
+            assert isinstance(objective, str), 'Objective needs to be a string, not type {}'.format(type(objective))
+            assert objective in metrics.SCORERS.keys(), 'Metric not supported, look at sklearn.metrics.SCORERS.keys()'
+            self.scorer = metrics.SCORERS[objective]
 
         # Pipeline Params
         self.mode = mode
+        self.objective = self.objective
         self.version = version
         self.includeOutput = include_output
         self.plotEDA = plot_eda
@@ -491,6 +488,9 @@ class Pipeline:
         assert self.target != '', "Empty target string."
         assert self.target in Utils.clean_keys(data).keys(), 'Target missing in data'
 
+        # Detect mode (classification / regression)
+        self._mode_detector(data)
+
         # Run Exploratory Data Analysis
         self._eda()
 
@@ -523,6 +523,31 @@ class Pipeline:
 
         self.is_fitted = True
         print('[AutoML] All done :)')
+
+    def _mode_detector(self, data: pd.DataFrame):
+        """
+        Detects the mode (Regression / Classification)
+        :param data: Data to detect mode on
+        """
+        # Only run if mode is not provided
+        if self.mode is None:
+
+            # Classification if string
+            if data[self.target].dtype == 'string':
+                self.mode = 'classification'
+                self.objective = 'neg_log_loss'
+
+            # Or if unique values is less than 10%
+            elif data[self.target].nunique() < 0.1 * len(data):
+                self.mode = 'classification'
+                self.objective = 'neg_log_loss'
+
+            # Else regression
+            else:
+                self.mode = 'regression'
+                self.objective = 'neg_mean_absolute_error'
+            self.scorer = metrics.SCORERS[self.objective]
+        return
 
     def _eda(self):
         if self.plotEDA:
