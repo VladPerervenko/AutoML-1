@@ -491,7 +491,7 @@ class Pipeline:
         self._mode_detector(data)
 
         # Run Exploratory Data Analysis
-        self._eda()
+        self._eda(data)
 
         # Preprocess Data
         self._data_processing(data)
@@ -548,10 +548,10 @@ class Pipeline:
             self.scorer = metrics.SCORERS[self.objective]
         return
 
-    def _eda(self):
+    def _eda(self, data: pd.DataFrame):
         if self.plotEDA:
             print('[AutoML] Starting Exploratory Data Analysis')
-            eda = DataExplorer(self.x, y=self.y,
+            eda = DataExplorer(data.drop(self.target, axis=1), y=data[self.target],
                                mode=self.mode,
                                folder=self.mainDir,
                                version=self.version)
