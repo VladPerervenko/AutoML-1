@@ -298,21 +298,21 @@ class DataProcesser:
         """
         # With quantiles
         if self.outlier_removal == 'quantiles':
-            self._q1 = data.quantile(0.25)
-            self._q3 = data.quantile(0.75)
-            return (data > self._q3).sum().sum() + (data < self._q1).sum().sum()
+            self._q1 = data[self.num_cols].quantile(0.25)
+            self._q3 = data[self.num_cols].quantile(0.75)
+            return (data[self.num_cols] > self._q3).sum().sum() + (data[self.num_cols] < self._q1).sum().sum()
 
         # By z-score
         elif self.outlier_removal == 'z-score':
-            self._means = data.mean(skipna=True, numeric_only=True)
-            self._stds = data.std(skipna=True, numeric_only=True)
+            self._means = data[self.num_cols].mean(skipna=True, numeric_only=True)
+            self._stds = data[self.num_cols].std(skipna=True, numeric_only=True)
             self._stds[self._stds == 0] = 1
-            z_score = (data - self._means) / self._stds
+            z_score = (data[self.num_cols] - self._means) / self._stds
             return (z_score > self.z_score_threshold).sum().sum()
 
         # By clipping
         elif self.outlier_removal == 'clip':
-            return (data > 1e12).sum().sum() + (data < -1e12).sum().sum()
+            return (data[self.num_cols] > 1e12).sum().sum() + (data[self.num_cols] < -1e12).sum().sum()
 
     def remove_outliers(self, data: pd.DataFrame, fit: bool = True) -> pd.DataFrame:
         """
@@ -326,17 +326,17 @@ class DataProcesser:
 
         # With Quantiles
         if self.outlier_removal == 'quantiles':
-            data = data.mask(data < self._q1)
-            data = data.mask(data > self._q3)
+            data[self.num_cols] = data[self.num_cols].mask(data[self.num_cols] < self._q1)
+            data[self.num_cols] = data[self.num_cols].mask(data[self.num_cols] > self._q3)
 
         # With z-score
         elif self.outlier_removal == 'z-score':
-            z_score = abs((data - self._means) / self._stds)
-            data = data.mask(z_score > self.z_score_threshold)
+            z_score = abs((data[self.num_cols] - self._means) / self._stds)
+            data[self.num_cols] = data[self.num_cols].mask(z_score > self.z_score_threshold)
 
         # With clipping
         elif self.outlier_removal == 'clip':
-            data = data.clip(lower=-1e12, upper=1e12)
+            data[self.num_cols] = data[self.num_cols].clip(lower=-1e12, upper=1e12)
 
         return data
 
@@ -364,14 +364,15 @@ class DataProcesser:
 
         # Linearly interpolates missing values
         elif self.missing_values == 'interpolate':
-            # Not recommended when columns are present with >10% missing values
-            if (data.isna().sum() / len(data) > 0.1).any():
-                warnings.warn('[AutoML] Strongly recommend to NOT use interpolation for features with more than 10% '
-                              'missing values')
-                # Get all non-date_cols & interpolate
-            ik = np.setdiff1d(data.keys().to_list(), self.date_cols)
+
+            # Columns which are present with >10% missing values are not interpolated
+            zero_keys = data.keys()[data.isna().sum() / len(data) > 0.1].tolist()
+
+            # Get all non-date_cols & interpolate
+            ik = np.setdiff1d(data.keys().to_list(), self.date_cols + zero_keys)
             data[ik] = data[ik].interpolate(limit_direction='both')
-            # Fill rest (date cols)
+
+            # Fill rest (date & more missing values cols)
             if data.isna().sum().sum() != 0:
                 data = data.fillna(0)
 
