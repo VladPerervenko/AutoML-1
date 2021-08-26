@@ -231,6 +231,7 @@ class Pipeline:
         # Flags
         self._set_flags()
 
+        # Directories
         if not no_dirs:
             print('exec')
             # Create Directories
@@ -240,16 +241,10 @@ class Pipeline:
             self._load_version()
 
         # Required sub-classes
-        self.dataProcesser = DataProcesser(target=self.target, num_cols=self.numCols, date_cols=self.dateCols,
-                                           cat_cols=self.catCols, missing_values=self.missingValues,
-                                           outlier_removal=self.outlierRemoval, z_score_threshold=self.zScoreThreshold)
-        self.dataSampler = DataSampler(method='both', margin=0.1, cv_splits=self.cvSplits, shuffle=self.shuffle,
-                                       fast_run=False, objective=self.objective)
-        self.dataSequencer = Sequencer(back=self.sequenceBack, forward=self.sequenceForward,
-                                       shift=self.sequenceShift, diff=self.sequenceDiff)
-        self.featureProcesser = FeatureProcesser(mode=self.mode, max_lags=self.maxLags, max_diff=self.maxDiff,
-                                                 extract_features=self.extractFeatures, timeout=self.featureTimeout,
-                                                 information_threshold=self.informationThreshold)
+        self.dataSampler = None
+        self.dataProcesser = None
+        self.dataSequencer = None
+        self.featureProcesser = None
 
         # Store Pipeline Settings
         args = locals()
@@ -567,6 +562,10 @@ class Pipeline:
         Organises the data cleaning. Heavy lifting is done in self.dataProcesser, but settings etc. needs
         to be organised.
         """
+        self.dataProcesser = DataProcesser(target=self.target, num_cols=self.numCols, date_cols=self.dateCols,
+                                           cat_cols=self.catCols, missing_values=self.missingValues,
+                                           outlier_removal=self.outlierRemoval, z_score_threshold=self.zScoreThreshold)
+
         if os.path.exists(self.mainDir + 'Data/Cleaned_v{}.csv'.format(self.version)):
             print('[AutoML] Loading Cleaned Data')
 
@@ -621,6 +620,8 @@ class Pipeline:
         Does not guarantee to return balanced classes. (Methods are data dependent)
         """
         # Only necessary for classification
+        self.dataSampler = DataSampler(method='both', margin=0.1, cv_splits=self.cvSplits, shuffle=self.shuffle,
+                                       fast_run=False, objective=self.objective)
         if self.mode == 'classification':
             # Check if exists
             if os.path.exists(self.mainDir + 'Data/Balanced_v{}.csv'.format(self.version)):
@@ -648,6 +649,8 @@ class Pipeline:
         Sequences the data. Useful mostly for problems where older samples play a role in future values.
         The settings of this module are NOT AUTOMATIC
         """
+        self.dataSequencer = Sequencer(back=self.sequenceBack, forward=self.sequenceForward,
+                                       shift=self.sequenceShift, diff=self.sequenceDiff)
         if self.sequence:
             if os.path.exists(self.mainDir + 'Data/Sequence_v{}.csv'.format(self.version)):
                 print('[AutoML] Loading Sequenced Data')
@@ -675,6 +678,9 @@ class Pipeline:
         Organises feature processing. Heavy lifting is done in self.featureProcesser, but settings, etc.
         needs to be organised.
         """
+        self.featureProcesser = FeatureProcesser(mode=self.mode, max_lags=self.maxLags, max_diff=self.maxDiff,
+                                                 extract_features=self.extractFeatures, timeout=self.featureTimeout,
+                                                 information_threshold=self.informationThreshold)
         # Check if exists
         if os.path.exists(self.mainDir + 'Data/Extracted_v{}.csv'.format(self.version)):
             print('[AutoML] Loading Extracted Features')
