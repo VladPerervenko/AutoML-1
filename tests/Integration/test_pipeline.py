@@ -23,7 +23,10 @@ class TestPipeline(unittest.TestCase):
         cls.r_data['target'] = y
 
     def test_no_dirs(self):
+        if os.path.exists('AutoML'):
+            shutil.rmtree('AutoML')
         pipeline = Pipeline(no_dirs=True)
+        assert not os.path.exists('AutoML'), 'Directory created'
 
     def test_regression(self):
         if os.path.exists('AutoML'):
