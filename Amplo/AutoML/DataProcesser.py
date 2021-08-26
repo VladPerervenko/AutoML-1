@@ -101,6 +101,9 @@ class DataProcesser:
         # Remove Duplicates
         data = self.remove_duplicates(data)
 
+        # Infer data-types
+        data = self.infer_data_types(data)
+
         # Convert data types
         data = self.convert_data_types(data, fit_categorical=True)
 
@@ -184,6 +187,26 @@ class DataProcesser:
         self._q3 = None if settings['_q3'] is None else pd.read_json(settings['_q3'])
         self.dummies = settings['dummies']
         self.is_fitted = True
+
+    def infer_data_types(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        In case no data types are provided, this function infers the most likely data types
+        """
+        if len(self.cat_cols) == len(self.num_cols) == len(self.date_cols) == 0:
+            # First cleanup
+            data = data.infer_objects()
+
+            # All numeric are easy
+            self.num_cols = data.keys()[data.dtypes == float].tolist()
+
+            # String are either datetime or categorical, we check datetime
+            object_keys = data.keys()[data.dtypes == object]
+            object_is_date = data[object_keys].astype('str').apply(pd.to_datetime, errors='coerce')\
+                .isna().sum() < 0.1 * len(data)
+            self.date_cols = object_keys[object_is_date].tolist()
+            self.cat_cols = object_keys[~object_is_date].tolist()
+
+        return data
 
     def convert_data_types(self, data: pd.DataFrame, fit_categorical: bool = True) -> pd.DataFrame:
         """
