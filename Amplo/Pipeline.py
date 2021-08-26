@@ -83,7 +83,7 @@ class Pipeline:
                  stacking: bool = False,
 
                  # Production
-                 custom_function: str = None,
+                 preprocess_function: str = None,
 
                  # Flags
                  plot_eda: bool = True,
@@ -150,7 +150,7 @@ class Pipeline:
         self.mainDir = 'AutoML/'
         self.target = re.sub('[^a-z0-9]', '_', target.lower())
         self.verbose = verbose
-        self.customFunction = custom_function
+        self.preprocessFunction = preprocess_function
         self.name = name
 
         # Checks
@@ -175,7 +175,7 @@ class Pipeline:
 
         # Pipeline Params
         self.mode = mode
-        self.objective = self.objective
+        self.objective = objective
         self.version = version
         self.includeOutput = include_output
         self.plotEDA = plot_eda
@@ -241,10 +241,10 @@ class Pipeline:
             self._load_version()
 
         # Required sub-classes
-        self.dataSampler = None
-        self.dataProcesser = None
-        self.dataSequencer = None
-        self.featureProcesser = None
+        self.dataSampler = DataSampler()
+        self.dataProcesser = DataProcesser()
+        self.dataSequencer = Sequencer()
+        self.featureProcesser = FeatureProcesser()
 
         # Store Pipeline Settings
         args = locals()
@@ -563,7 +563,7 @@ class Pipeline:
         to be organised.
         """
         self.dataProcesser = DataProcesser(target=self.target, num_cols=self.numCols, date_cols=self.dateCols,
-                                           cat_cols=self.catCols, missing_values=self.missingValues,
+                                           cat_cols=self.catCols, missing_values=self.missingValues, mode=self.mode,
                                            outlier_removal=self.outlierRemoval, z_score_threshold=self.zScoreThreshold)
 
         if os.path.exists(self.mainDir + 'Data/Cleaned_v{}.csv'.format(self.version)):
@@ -1153,10 +1153,6 @@ class Pipeline:
 
         return self
 
-    def _error_analysis(self):
-        # todo implement
-        pass
-
     def convert_data(self, x: pd.DataFrame) -> [pd.DataFrame, pd.Series]:
         """
         Function that uses the same process as the pipeline to clean data.
@@ -1206,8 +1202,8 @@ class Pipeline:
             print('[AutoML] Predicting with {}, v{}'.format(type(self.bestModel).__name__, self.version))
 
         # Custom code
-        if self.customFunction is not None:
-            exec(self.customFunction)
+        if self.preprocessFunction is not None:
+            exec(self.preprocessFunction)
 
         # Convert
         x, y = self.convert_data(data)
@@ -1235,8 +1231,8 @@ class Pipeline:
             type(self.bestModel).__name__)
 
         # Custom code
-        if self.customFunction is not None:
-            exec(self.customFunction)
+        if self.preprocessFunction is not None:
+            exec(self.preprocessFunction)
 
         # Print
         if self.verbose > 0:
