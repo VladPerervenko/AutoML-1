@@ -750,7 +750,7 @@ class FeatureProcesser:
         # Add selected
         for k in self.laggedFeatures:
             key, lag = k.split('__lag__')
-            self.x[k] = self.originalInput[key].shift(-int(lag), fill_value=0)
+            self.x[k] = self.x[key].shift(-int(lag), fill_value=0)
 
         if self.verbosity > 0:
             print('[AutoML] Added {} lagged features'.format(len(self.laggedFeatures)))
