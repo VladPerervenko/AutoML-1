@@ -1,7 +1,7 @@
 # Amplo - AutoML (for Machine Data)
 [![image](https://img.shields.io/pypi/v/amplo.svg)](https://pypi.python.org/pypi/amplo)
 [![PyPI - License](https://img.shields.io/pypi/l/virtualenv?style=flat-square)](https://opensource.org/licenses/MIT)
-![](https://img.shields.io/badge/python-%3E%3D3.6%2C%3C4.0-blue)](https://pypi.org/project/amplo/)
+![](https://img.shields.io/badge/python-%3E%3D3.6%2C%3C4.0-blue)
 ![](https://tokei.rs/b1/github/nielsuit227/automl)
 
 Welcome to the Automated Machine Learning package `Amplo`. Amplo's AutoML is designed specifically for machine data and 
