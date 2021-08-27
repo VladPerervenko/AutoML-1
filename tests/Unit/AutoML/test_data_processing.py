@@ -28,6 +28,87 @@ class TestDataProcessing(unittest.TestCase):
         cleaned = dp.fit_transform(self.classification)
         assert check_dataframe_quality(cleaned)
 
+    def test_interpolation(self):
+        dp = DataProcesser()
+        data = pd.DataFrame({'a': [1, np.nan, np.nan, np.nan, 5], 'b': [1, 2, 3, 4, 5]})
+        cleaned = dp.fit_transform(data)
+        assert cleaned['a'].tolist() == [1, 0, 0, 0, 5]
+
+    def test_type_detector(self):
+        dp = DataProcesser()
+        data = pd.DataFrame({
+            'a': ['a', 'b', 'c', 'd'],
+            'b': [1, 2, 3, 4],
+            'c': ['2020-01-01', '2020-01-02', '2020-01-03', '2020-01-04']})
+        cleaned = dp.fit_transform(data)
+        assert pd.api.types.is_integer_dtype(cleaned['b'])
+        assert pd.api.types.is_datetime64_any_dtype(cleaned['c'])
+        assert 'a_b' in cleaned
+        assert 'a_c' in cleaned
+        assert 'a_d' in cleaned
+
+    def test_type_detector_with_nan(self):
+        dp = DataProcesser()
+        data = pd.DataFrame({
+            'a': ['a', 'b', np.nan, 'c', 'd'],
+            'b': [1, 2, 3, 4, np.nan],
+            'c': ['2020-01-01', np.nan, '2020-01-03', '2020-01-04', '2020-01-05']})
+        cleaned = dp.fit_transform(data)
+        assert pd.api.types.is_integer_dtype(cleaned['b'])
+        assert pd.api.types.is_datetime64_any_dtype(cleaned['c'])
+        assert 'a_b' in cleaned
+        assert 'a_c' in cleaned
+        assert 'a_d' in cleaned
+
+    def test_missing_values(self):
+        data = pd.DataFrame({
+            'a': ['a', 'b', np.nan, 'c', 'd'],
+            'b': [1, 2, 3, 4, np.nan],
+            'c': ['2020-01-01', np.nan, '2020-01-03', '2020-01-04', '2020-01-05'],
+            'd': [1, 2, 3, 4, 5]})
+
+        # Remove rows
+        dp = DataProcesser(missing_values='remove_rows')
+        cleaned = dp.fit_transform(data)
+        assert len(cleaned) == 3, cleaned.head()        # the nan in the categorical is omitted
+
+        # Remove cols
+        dp = DataProcesser(missing_values='remove_cols')
+        cleaned = dp.fit_transform(data)
+        assert len(cleaned.keys()) == 4, cleaned.head()
+
+        # Replace with 0
+        dp = DataProcesser(missing_values='zero')
+        cleaned = dp.fit_transform(data)
+        assert (cleaned.loc[2, ['a_b', 'a_c', 'a_d']] == 0).all()
+        assert cleaned['b'][4] == 0
+        assert cleaned['c'][1] == 0
+
+        # Interpolate
+        dp = DataProcesser(missing_values='interpolate')
+        cleaned = dp.fit_transform(data)
+        assert cleaned.isna().sum().sum() == 0, cleaned.head()
+
+        # Fill with mean
+        dp = DataProcesser(missing_values='mean')
+        cleaned = dp.fit_transform(data)
+        assert (cleaned.loc[2, ['a_b', 'a_c', 'a_d']] == 0).all()
+        assert cleaned['b'][4] == 2.5
+        assert cleaned['c'][1] == pd.to_datetime('2020-01-03 6:00:00', utc=True)
+
+    def test_classification_target(self):
+        data = pd.DataFrame({'a': [2, 2, 1, 1, 2], 'b': ['class1', 'class2', 'class1', 'class2', 'class1']})
+
+        # Numerical not starting at 0
+        dp = DataProcesser(target='a')
+        cleaned = dp.fit_transform(data)
+        assert set(cleaned['a']) == {0, 1}
+
+        # Categorical
+        dp = DataProcesser(target='b')
+        cleaned = dp.fit_transform(data)
+        assert set(cleaned['b']) == {0, 1}
+
     def test_outliers(self):
         x = pd.DataFrame({'a': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1e15],
                           'target': np.linspace(0, 1, 24).tolist()})

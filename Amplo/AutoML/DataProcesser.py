@@ -1,5 +1,4 @@
 import re
-import warnings
 import numpy as np
 import pandas as pd
 from ..Utils import clean_keys
@@ -9,10 +8,10 @@ class DataProcesser:
 
     def __init__(self,
                  target: str = None,
-                 num_cols: list = None,
+                 float_cols: list = None,
+                 int_cols: list = None,
                  date_cols: list = None,
                  cat_cols: list = None,
-                 mode: str = 'regression',
                  include_output: bool = False,
                  missing_values: str = 'interpolate',
                  outlier_removal: str = 'clip',
@@ -47,10 +46,11 @@ class DataProcesser:
 
         # Arguments
         self.version = version
-        self.mode = mode
         self.includeOutput = include_output
         self.target = target if target is None else re.sub("[^a-z0-9]", '_', target.lower())
-        self.num_cols = [] if num_cols is None else [re.sub('[^a-z0-9]', '_', nc.lower()) for nc in num_cols]
+        self.float_cols = [] if float_cols is None else [re.sub('[^a-z0-9]', '_', fc.lower()) for fc in float_cols]
+        self.int_cols = [] if int_cols is None else [re.sub('[^a-z0-9]', '_', ic.lower()) for ic in int_cols]
+        self.num_cols = self.float_cols + self.int_cols
         self.cat_cols = [] if cat_cols is None else [re.sub('[^a-z0-9]', '_', cc.lower()) for cc in cat_cols]
         self.date_cols = [] if date_cols is None else [re.sub('[^a-z0-9]', '_', dc.lower()) for dc in date_cols]
         if self.target in self.num_cols:
@@ -112,6 +112,9 @@ class DataProcesser:
         # Remove Constants
         data = self.remove_constants(data)
 
+        # Convert integer columns
+        data = self.convert_float_int(data)
+
         # Clean target
         data = self.clean_target(data)
 
@@ -148,6 +151,9 @@ class DataProcesser:
 
         # Remove missing values
         data = self.remove_missing_values(data)
+
+        # Convert integer columns
+        data = self.convert_float_int(data)
 
         return data
 
@@ -187,7 +193,7 @@ class DataProcesser:
         self.dummies = settings['dummies']
         self.is_fitted = True
 
-    def infer_data_types(self, data: pd.DataFrame) -> pd.DataFrame:
+    def infer_data_types(self, data: pd.DataFrame):
         """
         In case no data types are provided, this function infers the most likely data types
         """
@@ -196,16 +202,23 @@ class DataProcesser:
             data = data.infer_objects()
 
             # Remove target from columns
-            if not self.includeOutput:
+            if not self.includeOutput and self.target is not None and self.target in data:
                 data = data.drop(self.target, axis=1)
 
-            # All numeric are easy
-            self.num_cols = data.keys()[data.dtypes == float].tolist()
+            # All numeric, floats or ints
+            self.int_cols = data.keys()[data.dtypes == int].tolist()
+            self.float_cols = data.keys()[data.dtypes == float].tolist()
+            self.num_cols = self.int_cols + self.float_cols
+            for key in self.float_cols:
+                forced_int = pd.to_numeric(data[key].fillna(0), errors='coerce', downcast='integer')
+                if pd.api.types.is_integer_dtype(forced_int):
+                    self.float_cols.remove(key)
+                    self.int_cols.append(key)
 
             # String are either datetime or categorical, we check datetime
             object_keys = data.keys()[data.dtypes == object]
             object_is_date = data[object_keys].astype('str').apply(pd.to_datetime, errors='coerce')\
-                .isna().sum() < 0.1 * len(data)
+                .isna().sum() < 0.3 * len(data)
             self.date_cols = object_keys[object_is_date].tolist()
             self.cat_cols = object_keys[~object_is_date].tolist()
 
@@ -234,7 +247,10 @@ class DataProcesser:
 
         # Numerical columns
         for key in [key for key in data.keys() if key not in self.date_cols and key not in self.cat_cols]:
-            data.loc[:, key] = pd.to_numeric(data[key], errors='coerce', downcast='float')
+            if pd.api.types.is_float_dtype(data[key]):
+                data.loc[:, key] = pd.to_numeric(data[key], errors='coerce', downcast='float')
+            elif pd.api.types.is_integer_dtype(data[key]):
+                data.loc[:, key] = pd.to_numeric(data[key], errors='coerce', downcast='integer')
 
         # Categorical columns
         if fit_categorical:
@@ -351,18 +367,17 @@ class DataProcesser:
         # With clipping
         elif self.outlier_removal == 'clip':
             data[self.num_cols] = data[self.num_cols].clip(lower=-1e12, upper=1e12)
-
         return data
 
     def remove_missing_values(self, data: pd.DataFrame) -> pd.DataFrame:
         """
         Fills missing values (infinities and 'not a number's)
         """
-        # Note
-        self.imputedMissingValues = np.sum(np.isnan(data.values)) + np.sum(data.values == np.Inf) + np.sum(data.values
-                                                                                                           == -np.Inf)
         # Replace infinities
         data = data.replace([np.inf, -np.inf], np.nan)
+
+        # Note
+        self.imputedMissingValues = data[self.num_cols].isna().sum().sum()
 
         # Removes all rows with missing values
         if self.missing_values == 'remove_rows':
@@ -386,6 +401,19 @@ class DataProcesser:
             ik = np.setdiff1d(data.keys().to_list(), self.date_cols + zero_keys)
             data[ik] = data[ik].interpolate(limit_direction='both')
 
+            # Fill date columns
+            for key in self.date_cols:
+                if data[key].isna().sum() != 0:
+                    # Interpolate
+                    ints = pd.Series(data[key].values.astype('int64'))
+                    ints[ints < 0] = np.nan
+                    data[key] = pd.to_datetime(ints.interpolate(), unit='ns')
+
+                    # Uses date range (fixed interval)
+                    # dr = pd.date_range(data[key].min(), data[key].max(), len(data))
+                    # if (data[key] == dr).sum() > len(data) - data[key].isna().sum():
+                    #     data[key] = dr
+
             # Fill rest (date & more missing values cols)
             if data.isna().sum().sum() != 0:
                 data = data.fillna(0)
@@ -394,18 +422,36 @@ class DataProcesser:
         elif self.missing_values == 'mean':
             data = data.fillna(data.mean())
 
+            # Need to be individual for some reason
+            for key in self.date_cols:
+                data[key] = data[key].fillna(data[key].mean())
+
+        return data
+
+    def convert_float_int(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Integer columns with NaN in them are interpreted as floats.
+        In the beginning we check whether some columns should be integers,
+        but we rely on different algorithms to take care of the NaN.
+        Therefore, we only convert floats to integers at the very end
+        """
+        for key in self.int_cols:
+            if key in data:
+                data[key] = pd.to_numeric(data[key], errors='coerce', downcast='integer')
         return data
 
     def clean_target(self, data: pd.DataFrame) -> pd.DataFrame:
         """
         Cleans the target column -- missing values already done, just converting classification classes
         """
-        if self.target in data and self.mode == 'classification':
+        if self.target in data:
+            # Object is for sure classification
             if data[self.target].dtype == object:
-                data[self.target] = data[self.target].astype('categorical').cat.codes
+                data[self.target] = data[self.target].astype('category').cat.codes
 
-            else:
-                # todo ensure that classes are 0, 1, ...
-
-
+            # Classification check
+            elif data[self.target].nunique() <= 0.5 * len(data):
+                if sorted(set(data[self.target])) != [i for i in range(data[self.target].nunique())]:
+                    for i, val in enumerate(sorted(set(data[self.target]))):
+                        data.loc[data[self.target] == val, self.target] = i
         return data

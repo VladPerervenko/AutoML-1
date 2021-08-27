@@ -44,7 +44,8 @@ class Pipeline:
                  objective: str = None,
 
                  # Data Processing
-                 num_cols: list = None,
+                 int_cols: list = None,
+                 float_cols: list = None,
                  date_cols: list = None,
                  cat_cols: list = None,
                  missing_values: str = 'zero',
@@ -183,7 +184,8 @@ class Pipeline:
         self.documentResults = document_results
 
         # Data Processing params
-        self.numCols = [] if num_cols is None else num_cols
+        self.intCols = [] if int_cols is None else int_cols
+        self.floatCols = [] if float_cols is None else float_cols
         self.dateCols = [] if date_cols is None else date_cols
         self.catCols = [] if cat_cols is None else cat_cols
         self.missingValues = missing_values
@@ -562,8 +564,9 @@ class Pipeline:
         Organises the data cleaning. Heavy lifting is done in self.dataProcesser, but settings etc. needs
         to be organised.
         """
-        self.dataProcesser = DataProcesser(target=self.target, num_cols=self.numCols, date_cols=self.dateCols,
-                                           cat_cols=self.catCols, missing_values=self.missingValues, mode=self.mode,
+        self.dataProcesser = DataProcesser(target=self.target, int_cols=self.intCols, float_cols=self.floatCols,
+                                           date_cols=self.dateCols, cat_cols=self.catCols,
+                                           missing_values=self.missingValues,
                                            outlier_removal=self.outlierRemoval, z_score_threshold=self.zScoreThreshold)
 
         if os.path.exists(self.mainDir + 'Data/Cleaned_v{}.csv'.format(self.version)):
@@ -595,8 +598,10 @@ class Pipeline:
         # If no columns were provided, load them from data processor
         if self.dateCols is None:
             self.dateCols = self.settings['data_processing']['date_cols']
-        if self.numCols is None:
-            self.dateCols = self.settings['data_processing']['num_cols']
+        if self.intCols is None:
+            self.dateCols = self.settings['data_processing']['int_cols']
+        if self.floatCols is None:
+            self.floatCols = self.settings['data_processing']['float_cols']
         if self.catCols is None:
             self.catCols = self.settings['data_processing']['cat_cols']
 
