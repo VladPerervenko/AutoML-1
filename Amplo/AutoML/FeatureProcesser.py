@@ -160,7 +160,7 @@ class FeatureProcesser:
         assert self.is_fitted, "Can only use transform after object is fitted."
 
         # Clean & downcast data
-        data = data.astype('float32').clip(lower=1e-12, upper=1e12).fillna(0)
+        data = data.astype('float32').clip(lower=-1e12, upper=1e12).fillna(0)
 
         # Get original features
         features = self.featureSets[feature_set]
@@ -227,7 +227,7 @@ class FeatureProcesser:
         self.x = self.x[features]
 
         # And clip everything (we do this with all features in ._analyse_feature(), no exception)
-        self.x = self.x.astype('float32').clip(lower=1e-12, upper=1e12).fillna(0)
+        self.x = self.x.astype('float32').clip(lower=-1e12, upper=1e12).fillna(0)
 
         return self.x
 
@@ -280,7 +280,7 @@ class FeatureProcesser:
             self.model = DecisionTreeRegressor(max_depth=3)
 
         # Bit of necessary data cleaning (shouldn't change anything)
-        x = clean_keys(x.astype('float32').clip(lower=1e-12, upper=1e12).fillna(0).reset_index(drop=True))
+        x = clean_keys(x.astype('float32').clip(lower=-1e12, upper=1e12).fillna(0).reset_index(drop=True))
         self.x = copy.copy(x)
         self.originalInput = copy.copy(x)
         self.y = y.replace([np.inf, -np.inf], 0).fillna(0).reset_index(drop=True)
@@ -300,7 +300,7 @@ class FeatureProcesser:
         In case of multiclass, we score per class :)
         """
         # Clean feature
-        feature = feature.clip(lower=1e-12, upper=1e12).fillna(0).values.reshape((-1, 1))
+        feature = feature.clip(lower=-1e12, upper=1e12).fillna(0).values.reshape((-1, 1))
 
         # Copy & fit model
         m = copy.copy(self.model)
@@ -417,7 +417,7 @@ class FeatureProcesser:
         # Add features
         for k in self.datetimeFeatures:
             key, _, period = k.split('__')
-            self.x[k] = getattr(self.x[key].dt, period).clip(lower=1e-12, upper=1e12).fillna(0)
+            self.x[k] = getattr(self.x[key].dt, period).clip(lower=-1e12, upper=1e12).fillna(0)
 
         # Print result
         if self.verbosity > 0:
@@ -480,11 +480,11 @@ class FeatureProcesser:
             if '__x__' in k:
                 key_a, key_b = k.split('__x__')
                 feature = self.x[key_a] * self.x[key_b]
-                self.x[k] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
+                self.x[k] = feature.clip(lower=-1e12, upper=1e12).fillna(0)
             else:
                 key_a, key_b = k.split('__d__')
                 feature = self.x[key_a] / self.x[key_b]
-                self.x[k] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
+                self.x[k] = feature.clip(lower=-1e12, upper=1e12).fillna(0)
 
         # Print result
         if self.verbosity > 0:
@@ -581,11 +581,11 @@ class FeatureProcesser:
             if '__sub__' in key:
                 key_a, key_b = key.split('__sub__')
                 feature = self.x[key_a] - self.x[key_b]
-                self.x.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
+                self.x.loc[:, key] = feature.clip(lower=-1e12, upper=1e12).fillna(0)
             else:
                 key_a, key_b = key.split('__add__')
                 feature = self.x[key_a] + self.x[key_b]
-                self.x.loc[:, key] = feature.clip(lower=1e-12, upper=1e12).fillna(0)
+                self.x.loc[:, key] = feature.clip(lower=-1e12, upper=1e12).fillna(0)
 
         # store
         if self.verbosity > 0:
@@ -643,7 +643,7 @@ class FeatureProcesser:
         k_means = MiniBatchKMeans(n_clusters=clusters)
         column_names = ['dist__{}_{}'.format(i, clusters) for i in range(clusters)]
         distances = pd.DataFrame(columns=column_names, data=k_means.fit_transform(data))
-        distances = distances.clip(lower=1e-12, upper=1e12).fillna(0)
+        distances = distances.clip(lower=-1e12, upper=1e12).fillna(0)
         self._centers = pd.DataFrame(columns=self.originalInput.keys(), data=k_means.cluster_centers_)
 
         # Analyse correlation
@@ -711,7 +711,7 @@ class FeatureProcesser:
             key, diff = k.split('__diff__')
             feature = self.x[key]
             for i in range(1, int(diff)):
-                feature = feature.diff().clip(lower=1e-12, upper=1e12).fillna(0)
+                feature = feature.diff().clip(lower=-1e12, upper=1e12).fillna(0)
             self.x[k] = feature
 
         # Print output
