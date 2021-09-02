@@ -22,6 +22,27 @@ class TestPipeline(unittest.TestCase):
         cls.r_data = pd.DataFrame(x, columns=['Feature_{}'.format(i) for i in range(x.shape[1])])
         cls.r_data['target'] = y
 
+    def test_mode_detector(self):
+        if os.path.exists('AutoML'):
+            shutil.rmtree('AutoML')
+
+        # Classification numeric
+        pipeline = Pipeline(no_dirs=True, target='target')
+        pipeline._mode_detector(self.c_data)
+        assert pipeline.mode == 'classification'
+
+        # Classification categorical
+        df = self.c_data
+        df['target'] = [f'Class_{v}' for v in df['target'].values]
+        pipeline = Pipeline(no_dirs=True, target='target')
+        pipeline._mode_detector(self.c_data)
+        assert pipeline.mode == 'classification'
+
+        # Regression
+        pipeline = Pipeline(no_dirs=True, target='target')
+        pipeline._mode_detector(self.r_data)
+        assert pipeline.mode == 'regression'
+
     def test_no_dirs(self):
         if os.path.exists('AutoML'):
             shutil.rmtree('AutoML')

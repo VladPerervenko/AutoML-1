@@ -303,7 +303,7 @@ class Pipeline:
         assert self.is_fitted, "Pipeline not yet fitted."
         return self.settings
 
-    def load_settings(self, settings: dict, model: object):
+    def load_settings(self, settings: dict):
         """
         Restores a pipeline from settings.
 
@@ -311,16 +311,19 @@ class Pipeline:
         ----------
         settings [dict]: Pipeline settings
         """
-        # Check whether model is correctly provided
-        assert type(model).__name__ == settings['model']
-
         # Set parameters
         self.__init__(**settings['pipeline'])
         self.settings = settings
-        self.is_fitted = True
         self.dataProcesser.load_settings(settings['data_processing'])
         self.featureProcesser.load_settings(settings['feature_processing'])
+
+    def load_model(self, model: object):
+        """
+        Restores a trained model
+        """
+        assert type(model).__name__ == self.settings['model']
         self.bestModel = model
+        self.is_fitted = True
 
     def _create_dirs(self):
         folders = ['', 'EDA', 'Data', 'Features', 'Documentation', 'Production', 'Settings']
@@ -534,7 +537,7 @@ class Pipeline:
         if self.mode is None:
 
             # Classification if string
-            if data[self.target].dtype == 'string':
+            if data[self.target].dtype == str:
                 self.mode = 'classification'
                 self.objective = 'neg_log_loss'
 
