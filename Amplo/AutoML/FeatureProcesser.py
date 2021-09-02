@@ -178,11 +178,11 @@ class FeatureProcesser:
         required = copy.copy(original_features)
         required += list(itertools.chain.from_iterable([s.split('__')[::2] for s in self.linearFeatures]))
         required += list(itertools.chain.from_iterable([s.split('__')[::2] for s in self.crossFeatures]))
-        required += list(itertools.chain.from_iterable([s.split('__')[1] for s in self.trigonometricFeatures]))
-        required += list(itertools.chain.from_iterable([s[5:] for s in self.inverseFeatures]))
-        required += list(itertools.chain.from_iterable([s.split('__diff__')[0] for s in self.diffFeatures]))
-        required += list(itertools.chain.from_iterable([s.split('__lag__')[0] for s in self.laggedFeatures]))
-        required += list(itertools.chain.from_iterable([s.split('__dt__')[0] for s in self.datetimeFeatures]))
+        required += [s.split('__')[1] for s in self.trigonometricFeatures]
+        required += [s[5:] for s in self.inverseFeatures]
+        required += [s.split('__diff__')[0] for s in self.diffFeatures]
+        required += [s.split('__lag__')[0] for s in self.laggedFeatures]
+        required += [s.split('__dt__')[0] for s in self.datetimeFeatures]
         if len(self.kMeansFeatures) != 0:
             required += list(self._centers.keys())
 
@@ -192,7 +192,7 @@ class FeatureProcesser:
         # Impute missing keys
         missing_keys = [k for k in required if k not in data.keys()]
         if len(missing_keys) > 0:
-            warnings.warn('[Feature Extraction] Imputing {} keys'.format(len(missing_keys)))
+            warnings.warn('[Feature Extraction] Imputing {} keys: {}'.format(len(missing_keys), missing_keys))
         for k in missing_keys:
             data.loc[:, k] = np.zeros(len(data))
 
