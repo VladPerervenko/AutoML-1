@@ -23,6 +23,9 @@ class BaseClassifier:
         self.model.set_params(**params)
         return self
 
+    def reset_weights(self):
+        pass
+
     def predict(self, x):
         return self.model.predict(x)
 
