@@ -135,17 +135,15 @@ class Modeller:
         elif self.mode == 'regression':
             # The thorough ones
             if self.samples < 25000:
-                if not self.needsProba:
-                    models.append(linear_model.LinearRegression())
-                    models.append(svm.SVR(kernel='rbf'))
+                models.append(linear_model.LinearRegression())
+                models.append(svm.SVR(kernel='rbf'))
                 models.append(ensemble.BaggingRegressor())
                 # models.append(ensemble.GradientBoostingRegressor()) == XG Boost
                 models.append(XGBRegressor())
 
             # The efficient ones
             else:
-                if not self.needsProba:
-                    models.append(linear_model.LinearRegression())
+                models.append(linear_model.LinearRegression())
                 # models.append(ensemble.HistGradientBoostingRegressor()) == LGBM
                 models.append(LGBMRegressor())
 
