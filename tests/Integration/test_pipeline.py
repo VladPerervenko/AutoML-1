@@ -1,5 +1,6 @@
 import os
 import json
+import joblib
 import shutil
 import unittest
 import numpy as np
@@ -42,6 +43,20 @@ class TestPipeline(unittest.TestCase):
         pipeline = Pipeline(no_dirs=True, target='target')
         pipeline._mode_detector(self.r_data)
         assert pipeline.mode == 'regression'
+
+    def test_stacking(self):
+        if os.path.exists('AutoML'):
+            shutil.rmtree('AutoML')
+        pipeline = Pipeline(target='target', grid_search_candidates=1,
+                            stacking=True, feature_timeout=5)
+        pipeline.fit(self.c_data)
+        pipeline._prepare_production_files(model='StackingClassifier')
+        shutil.rmtree('AutoML')
+        pipeline = Pipeline(target='target', grid_search_candidates=1,
+                            stacking=True, feature_timeout=5)
+        pipeline.fit(self.r_data)
+        pipeline._prepare_production_files(model='StackingRegressor')
+        shutil.rmtree('AutoML')
 
     def test_no_dirs(self):
         if os.path.exists('AutoML'):
@@ -90,8 +105,10 @@ class TestPipeline(unittest.TestCase):
 
         # Settings prediction
         settings = json.load(open('AutoML/Production/v1/Settings.json', 'r'))
+        model = joblib.load('AutoML/Production/v1/Model.joblib')
         p = Pipeline()
-        p.load_settings(settings, pipeline.bestModel)
+        p.load_settings(settings)
+        p.load_model(model)
         assert np.allclose(p.predict(self.r_data), prediction)
 
         # Cleanup
@@ -129,8 +146,10 @@ class TestPipeline(unittest.TestCase):
 
         # Settings prediction
         settings = json.load(open('AutoML/Production/v1/Settings.json', 'r'))
+        model = joblib.load('AutoML/Production/v1/Model.joblib')
         p = Pipeline()
-        p.load_settings(settings, pipeline.bestModel)
+        p.load_settings(settings)
+        p.load_model(model)
         assert np.allclose(p.predict_proba(self.c_data), prediction)
 
         # Cleanup
