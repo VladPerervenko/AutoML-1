@@ -192,7 +192,7 @@ class FeatureProcesser:
         # Impute missing keys
         missing_keys = [k for k in required if k not in data.keys()]
         if len(missing_keys) > 0:
-            warnings.warn('[Feature Extraction] Imputing {} keys: {}'.format(len(missing_keys), missing_keys))
+            warnings.warn('[AutoML] Imputing {} keys: {}'.format(len(missing_keys), missing_keys))
         for k in missing_keys:
             data.loc[:, k] = np.zeros(len(data))
 
