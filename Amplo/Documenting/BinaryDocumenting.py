@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import plot_roc_curve
 from sklearn.metrics import auc
+from urllib.error import URLError
 
 
 class BinaryDocumenting(FPDF):
@@ -39,8 +40,11 @@ class BinaryDocumenting(FPDF):
         self.y = None
 
     def header(self):
-        self.image('https://raw.githubusercontent.com/nielsuit227/AutoML/main/Amplo/Static/logo.png',
-                   x=self.pm, y=self.pm, w=55, h=15)
+        try:        # No problem if not possible due lack of internet
+            self.image('https://raw.githubusercontent.com/nielsuit227/AutoML/main/Amplo/Static/logo.png',
+                       x=self.pm, y=self.pm, w=55, h=15)
+        except URLError:
+            pass
         self.set_font('Helvetica', '', 14)
         self.set_text_color(100, 100, 100)
         self.cell(self.WIDTH - 80)
@@ -157,23 +161,23 @@ class BinaryDocumenting(FPDF):
 
         # Statistics on results
         totals = np.sum(cm, axis=(1, 2), keepdims=True)
-        means = np.mean(cm / totals * 100, axis=0)
-        stds = np.std(cm / totals * 100, axis=0)
+        means = np.mean(cm / totals * 100, axis=0).astype('float')
+        stds = np.std(cm / totals * 100, axis=0).astype('float')
 
         # Store
         self.metrics = {
-            'Accuracy': [np.mean(accuracy), np.std(accuracy)],
-            'Precision': [np.mean(precision), np.std(precision)],
-            'Sensitivity': [np.mean(sensitivity), np.std(sensitivity)],
-            'Specificity': [np.mean(specificity), np.std(specificity)],
-            'F1 Score': [np.mean(f1_score), np.std(f1_score)],
+            'Accuracy': [float(np.mean(accuracy)), float(np.std(accuracy))],
+            'Precision': [float(np.mean(precision)), float(np.std(precision))],
+            'Sensitivity': [float(np.mean(sensitivity)), float(np.std(sensitivity))],
+            'Specificity': [float(np.mean(specificity)), float(np.std(specificity))],
+            'F1 Score': [float(np.mean(f1_score)), float(np.std(f1_score))],
         }
         self.confusion_matrix = {
             'means': means,
             'stds': stds,
         }
         self.outputMetrics = copy.deepcopy(self.metrics)
-        self.outputMetrics['True Positives'] = [means[0, 0], stds[0, 0]]
+        self.outputMetrics['True Positives'] = [means[0, 0], stds[0, 0]]        # These are float32s
         self.outputMetrics['False Positives'] = [means[0, 1], stds[0, 1]]
         self.outputMetrics['False Negatives'] = [means[1, 0], stds[1, 0]]
         self.outputMetrics['True Negatives'] = [means[1, 1], stds[1, 1]]
