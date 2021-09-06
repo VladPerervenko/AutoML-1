@@ -41,7 +41,7 @@ class Pipeline:
     def __init__(self,
                  target: str = '',
                  name: str = '',
-                 version: str = None,
+                 version: int = None,
                  mode: str = None,
                  objective: str = None,
 
@@ -102,13 +102,12 @@ class Pipeline:
         Parameters
         ----------
         target [str]: Column name of the output/dependent/regressand variable.
-        project [str]: Name of the project (for documentation)
-        device [str]: Name of the device (for documentation)
-        issue [str]: Name of the issue (for documentation)
-        version [str]: Pipeline version (set automatically)
+        name [str]: Name of the project (for documentation)
+        version [int]: Pipeline version (set automatically)
         mode [str]: 'classification' or 'regression'
         objective [str]: from sklearn metrics and scoring
-        num_cols [list[str]]: Column names of numerical columns
+        int_cols [list[str]]: Column names of integer columns
+        float_cols [list[str]]: Column names of float columns
         date_cols [list[str]]: Column names of datetime columns
         cat_cols [list[str]]: Column names of categorical columns
         missing_values [str]: [DataProcessing] - 'remove', 'interpolate', 'mean' or 'zero'
@@ -285,7 +284,7 @@ class Pipeline:
         # For new runs
         if started_versions == 0:
             with open(self.mainDir + 'changelog.txt', 'w') as f:
-                f.write('v1: Initial Run')
+                f.write('v1: Initial Run\n')
             self.version = 1
 
         # If last run was completed and we start a new
@@ -1132,8 +1131,6 @@ class Pipeline:
                     '{}Production/v{}/Report.pdf'.format(self.mainDir, self.version))
 
         # Save settings
-        with open('tmp.txt', 'w') as f:
-            f.write(str(self.settings))
         json.dump(self.settings, open(self.mainDir + 'Production/v{}/Settings.json'
                                       .format(self.version), 'w'), indent=4)
 
