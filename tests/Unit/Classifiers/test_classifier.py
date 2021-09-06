@@ -4,7 +4,7 @@ from sklearn.base import clone
 from sklearn.metrics import SCORERS
 
 
-class TestClassifier(object):
+class TestClassifier:
 
     def __init__(self):
         self.model = None
