@@ -19,24 +19,24 @@ class DataExplorer:
 
     def __init__(self, data,
                  y=None,
-                 mode='regression',
-                 plot_time_plots=True,
-                 plot_box_plots=False,
-                 plot_missing_values=True,
-                 plot_seasonality=False,
-                 plot_co_linearity=True,
-                 plot_differencing=False,
-                 plot_signal_correlations=False,
-                 plot_feature_importance=True,
-                 plot_scatter_plots=False,
-                 differ=0,
-                 pre_tag='',
-                 max_samples=10000,
-                 season_periods=24,
-                 lags=60,
-                 skip_completed=True,
-                 folder='',
-                 version=0):
+                 mode: str = 'regression',
+                 plot_time_plots: bool = True,
+                 plot_box_plots: bool = False,
+                 plot_missing_values: bool = True,
+                 plot_seasonality: bool = False,
+                 plot_co_linearity: bool = True,
+                 plot_differencing: bool = False,
+                 plot_signal_correlations: bool = False,
+                 plot_feature_importance: bool = True,
+                 plot_scatter_plots: bool = False,
+                 differ: int = 0,
+                 pre_tag: str = '',
+                 max_samples: int = 10000,
+                 season_periods: int = 24,
+                 lags: int = 60,
+                 skip_completed: bool = True,
+                 folder: str = '',
+                 version: str = 'v0'):
         """
         Automated Exploratory Data Analysis. Covers binary classification and regression.
         It generates:
@@ -94,22 +94,6 @@ class DataExplorer:
         if type(data) != pd.DataFrame:
             data = pd.DataFrame(data=data, columns=['Feature_{}'.format(i) for i in range(data.shape[1])])
         assert mode in ['classification', 'regression']
-        assert isinstance(plot_time_plots, bool)
-        assert isinstance(plot_box_plots, bool)
-        assert isinstance(plot_missing_values, bool)
-        assert isinstance(plot_co_linearity, bool)
-        assert isinstance(plot_differencing, bool)
-        assert isinstance(plot_signal_correlations, bool)
-        assert isinstance(plot_feature_importance, bool)
-        assert isinstance(plot_scatter_plots, bool)
-        assert isinstance(differ, int)
-        assert isinstance(pre_tag, str)
-        assert isinstance(max_samples, int)
-        assert isinstance(season_periods, int)
-        assert isinstance(lags, int)
-        assert isinstance(skip_completed, bool)
-        assert isinstance(folder, str)
-        assert isinstance(version, int)
 
         # Running booleans
         self.plotTimePlots = plot_time_plots
@@ -123,13 +107,13 @@ class DataExplorer:
         self.plotScatterPlots = plot_scatter_plots
 
         # Register data
-        self.data = data.astype('float32').fillna(0)
+        self.data = data.astype('float64').fillna(0)
         if y is not None:
             if type(y) == pd.DataFrame:
                 y = y[y.keys()[0]]
             if type(y) != pd.Series:
                 y = pd.Series(y)
-            self.Y = y.astype('float32').fillna(0)
+            self.Y = y.astype('float64').fillna(0)
 
         # General settings
         self.seasonPeriods = season_periods
