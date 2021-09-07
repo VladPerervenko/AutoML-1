@@ -1,4 +1,3 @@
-import copy
 import warnings
 import numpy as np
 import pandas as pd
@@ -15,7 +14,7 @@ from sklearn.model_selection import HalvingRandomSearchCV
 
 class HalvingGridSearch:
 
-    def __init__(self, model, params=None, cv=KFold(n_splits=3), scoring='accuracy',
+    def __init__(self, model, params=None, cv=KFold(n_splits=10), scoring='accuracy',
                  candidates=250, verbose=0):
         # Params
         self.model = model

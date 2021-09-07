@@ -11,7 +11,7 @@ from sklearn.metrics import SCORERS
 
 class OptunaGridSearch:
 
-    def __init__(self, model, cv=KFold(n_splits=3), scoring='accuracy', verbose=0, timeout=3600,
+    def __init__(self, model, cv=KFold(n_splits=10), scoring='accuracy', verbose=0, timeout=3600,
                  candidates=250):
         """
         Wrapper for Optuna Grid Search. Takes any model support by Amplo.AutoML.Modelling.
@@ -73,7 +73,7 @@ class OptunaGridSearch:
                 'leaf_size': trial.suggest_int('leaf_size', 1, min(100, int(self.samples / 10))),
             }
 
-        # Regressors
+        # Regression models
         elif type(self.model).__name__ == 'DecisionTreeRegressor':
             return {
                 'criterion': trial.suggest_categorical('criterion', ['mse', 'friedman_mse', 'mae', 'poisson']),
