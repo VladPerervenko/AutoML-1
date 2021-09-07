@@ -16,14 +16,16 @@ from sklearn import metrics
 from sklearn.model_selection import KFold
 from sklearn.model_selection import StratifiedKFold
 
-from . import Utils
+from Amplo import Utils
 
-from .AutoML.Sequencer import Sequencer
-from .AutoML.Modeller import Modeller
-from .AutoML.DataSampler import DataSampler
-from .AutoML.DataExplorer import DataExplorer
-from .AutoML.DataProcesser import DataProcesser
-from .AutoML.FeatureProcesser import FeatureProcesser
+from Amplo.AutoML.Sequencer import Sequencer
+from Amplo.AutoML.Modeller import Modeller
+from Amplo.AutoML.DataSampler import DataSampler
+from Amplo.AutoML.DataExplorer import DataExplorer
+from Amplo.AutoML.DataProcesser import DataProcesser
+from Amplo.AutoML.FeatureProcesser import FeatureProcesser
+from Amplo.Regressors.StackingRegressor import StackingRegressor
+from Amplo.Classifiers.StackingClassifier import StackingClassifier
 
 from .GridSearch.BaseGridSearch import BaseGridSearch
 from .GridSearch.HalvingGridSearch import HalvingGridSearch
@@ -39,7 +41,7 @@ class Pipeline:
     def __init__(self,
                  target: str = '',
                  name: str = '',
-                 version: str = None,
+                 version: int = None,
                  mode: str = None,
                  objective: str = None,
 
@@ -100,13 +102,12 @@ class Pipeline:
         Parameters
         ----------
         target [str]: Column name of the output/dependent/regressand variable.
-        project [str]: Name of the project (for documentation)
-        device [str]: Name of the device (for documentation)
-        issue [str]: Name of the issue (for documentation)
-        version [str]: Pipeline version (set automatically)
+        name [str]: Name of the project (for documentation)
+        version [int]: Pipeline version (set automatically)
         mode [str]: 'classification' or 'regression'
         objective [str]: from sklearn metrics and scoring
-        num_cols [list[str]]: Column names of numerical columns
+        int_cols [list[str]]: Column names of integer columns
+        float_cols [list[str]]: Column names of float columns
         date_cols [list[str]]: Column names of datetime columns
         cat_cols [list[str]]: Column names of categorical columns
         missing_values [str]: [DataProcessing] - 'remove', 'interpolate', 'mean' or 'zero'
@@ -283,7 +284,7 @@ class Pipeline:
         # For new runs
         if started_versions == 0:
             with open(self.mainDir + 'changelog.txt', 'w') as f:
-                f.write('v1: Initial Run')
+                f.write('v1: Initial Run\n')
             self.version = 1
 
         # If last run was completed and we start a new
@@ -303,7 +304,7 @@ class Pipeline:
         assert self.is_fitted, "Pipeline not yet fitted."
         return self.settings
 
-    def load_settings(self, settings: dict, model: object):
+    def load_settings(self, settings: dict):
         """
         Restores a pipeline from settings.
 
@@ -311,16 +312,19 @@ class Pipeline:
         ----------
         settings [dict]: Pipeline settings
         """
-        # Check whether model is correctly provided
-        assert type(model).__name__ == settings['model']
-
         # Set parameters
         self.__init__(**settings['pipeline'])
         self.settings = settings
-        self.is_fitted = True
         self.dataProcesser.load_settings(settings['data_processing'])
         self.featureProcesser.load_settings(settings['feature_processing'])
+
+    def load_model(self, model: object):
+        """
+        Restores a trained model
+        """
+        assert type(model).__name__ == self.settings['model']
         self.bestModel = model
+        self.is_fitted = True
 
     def _create_dirs(self):
         folders = ['', 'EDA', 'Data', 'Features', 'Documentation', 'Production', 'Settings']
@@ -492,11 +496,11 @@ class Pipeline:
         # Detect mode (classification / regression)
         self._mode_detector(data)
 
-        # Run Exploratory Data Analysis
-        self._eda(data)
-
         # Preprocess Data
         self._data_processing(data)
+
+        # Run Exploratory Data Analysis
+        self._eda()
 
         # Balance data
         self._data_sampling()
@@ -534,7 +538,7 @@ class Pipeline:
         if self.mode is None:
 
             # Classification if string
-            if data[self.target].dtype == 'string':
+            if data[self.target].dtype == str:
                 self.mode = 'classification'
                 self.objective = 'neg_log_loss'
 
@@ -550,10 +554,10 @@ class Pipeline:
             self.scorer = metrics.SCORERS[self.objective]
         return
 
-    def _eda(self, data: pd.DataFrame):
+    def _eda(self):
         if self.plotEDA:
             print('[AutoML] Starting Exploratory Data Analysis')
-            eda = DataExplorer(data.drop(self.target, axis=1), y=data[self.target],
+            eda = DataExplorer(self.x, y=self.y,
                                mode=self.mode,
                                folder=self.mainDir,
                                version=self.version)
@@ -809,8 +813,7 @@ class Pipeline:
 
             # Get model string
             if isinstance(model, str):
-                models = Modeller(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
-                model = models[[i for i in range(len(models)) if type(models[i]).__name__ == model][0]]
+                model = Utils.getModel(model, mode=self.mode, samples=len(self.x))
 
             # Organise existing results
             results = self.results[np.logical_and(
@@ -847,16 +850,14 @@ class Pipeline:
             return
 
         # If arguments aren't provided, run through promising models
-        models = Modeller(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
         results = self._sort_results(self.results[np.logical_and(
             self.results['type'] == 'Initial modelling',
             self.results['version'] == self.version,
         )])
         for iteration in range(self.gridSearchIterations):
             # Grab settings
-            settings = results.iloc[iteration]
-            model = copy.deepcopy(models[[i for i in range(len(models)) if type(models[i]).__name__ ==
-                                          settings['model']][0]])
+            settings = results.iloc[iteration] # IndexError
+            model = Utils.getModel(settings['model'], mode=self.mode, samples=len(self.x))
             feature_set = settings['dataset']
 
             # Check whether exists
@@ -929,12 +930,6 @@ class Pipeline:
         """
         if self.stacking:
             print('[AutoML] Creating Stacking Ensemble')
-            from sklearn import neighbors
-            from sklearn import tree
-            from sklearn import linear_model
-            from sklearn import svm
-            from sklearn import naive_bayes
-            from sklearn import ensemble
 
             # Select feature set that has been picked most often for hyper parameter optimization
             results = self._sort_results(self.results[np.logical_and(
@@ -942,53 +937,30 @@ class Pipeline:
                 self.results['version'] == self.version,
             )])
             feature_set = results['dataset'].value_counts().index[0]
-            print('[AutoML] Selected Stacking feature set: {}'.format(feature_set))
             results = results[results['dataset'] == feature_set]
+            print('[AutoML] Selected Stacking feature set: {}'.format(feature_set))
 
-            # Level 0, top n models + KNN, DT, Log Reg, (GNB), (SVM)
+            # Create Stacking Model Params
             n_stacking_models = 3
             stacking_models_str = results['model'].unique()[:n_stacking_models]
             stacking_models_params = [Utils.parse_json(results.iloc[np.where(results['model'] == sms)[0][0]]['params'])
                                       for sms in stacking_models_str]
-            models = Modeller(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
-            models_str = [type(m).__name__ for m in models]
-            stacking_models = [(sms, models[models_str.index(sms)].set_params(**stacking_models_params[i]))
-                               for i, sms in enumerate(stacking_models_str)]
+            stacking_models = dict([(sms, stacking_models_params[i]) for i, sms in enumerate(stacking_models_str)])
+            print('[AutoML] Stacked models: {}'.format(list(stacking_models.keys())))
+
+            # Add samples & Features
+            stacking_models['n_samples'], stacking_models['n_features'] = self.x.shape
 
             # Prepare Stack
             if self.mode == 'regression':
-                if 'KNeighborsRegressor' not in stacking_models_str:
-                    stacking_models.append(('KNeighborsRegressor', neighbors.KNeighborsRegressor()))
-                if 'DecisionTreeRegressor' not in stacking_models_str:
-                    stacking_models.append(('DecisionTreeRegressor', tree.DecisionTreeRegressor()))
-                if 'LinearRegression' not in stacking_models_str:
-                    stacking_models.append(('LinearRegression', linear_model.LinearRegression()))
-                if 'SVR' not in stacking_models_str and len(self.x) < 5000:
-                    stacking_models.append(('SVR', svm.SVR()))
-                level_one = linear_model.LinearRegression()
-                stack = ensemble.StackingRegressor(stacking_models, final_estimator=level_one)
+                stack = StackingRegressor(**stacking_models)
                 cv = KFold(n_splits=self.cvSplits, shuffle=self.shuffle)
+
             elif self.mode == 'classification':
-                if 'KNeighborsClassifier' not in stacking_models_str:
-                    stacking_models.append(('KNeighborsClassifier', neighbors.KNeighborsClassifier()))
-                if 'DecisionTreeClassifier' not in stacking_models_str:
-                    stacking_models.append(('DecisionTreeClassifier', tree.DecisionTreeClassifier()))
-                if 'LogisticRegression' not in stacking_models_str:
-                    stacking_models.append(('LogisticRegression', linear_model.LogisticRegression()))
-                if 'GaussianNB' not in stacking_models_str:
-                    stacking_models.append(('GaussianNB', naive_bayes.GaussianNB()))
-                if 'SVC' not in stacking_models_str and len(self.x) < 5000:
-                    stacking_models.append(('SVC', svm.SVC()))
-                # Solver
-                solver = 'lfbgs'  # Default for smaller datasets
-                if self.x.shape[0] > 10000 or self.x.shape[1] > 100:
-                    solver = 'sag'  # More efficient for larger datasets
-                level_one = linear_model.LogisticRegression(max_iter=2000, solver=solver)
-                stack = ensemble.StackingClassifier(stacking_models, final_estimator=level_one)
+                stack = StackingClassifier(**stacking_models)
                 cv = StratifiedKFold(n_splits=self.cvSplits, shuffle=self.shuffle)
             else:
                 raise NotImplementedError('Unknown mode')
-            print('[AutoML] Stacked models: {}'.format([type(i[1]).__name__ for i in stacking_models]))
 
             # Cross Validate
             x, y = self.x[self.featureSets[feature_set]].to_numpy(), self.y.to_numpy()
@@ -1001,22 +973,25 @@ class Pipeline:
                 model.fit(xt, yt)
                 score.append(self.scorer(model, xv, yv))
                 times.append(time.time() - start_time)
+
+            # Output Results
             print('[AutoML] Stacking result:')
             print('[AutoML] {}:        {:.2f} \u00B1 {:.2f}'.format(self.objective, np.mean(score), np.std(score)))
-            self.results.append(pd.DataFrame({
+            self.results = self.results.append({
                 'date': datetime.today().strftime('%d %b %y'),
                 'model': type(stack).__name__,
                 'dataset': feature_set,
-                'params': dict([(stacking_models_str[ind] + '__' + key, stacking_models_params[ind][key]) for ind in
-                                range(len(stacking_models_str)) for key in stacking_models_params[ind].keys()]),
+                'params': json.dumps(stack.get_params()),
                 'mean_objective': np.mean(score),
                 'std_objective': np.std(score),
                 'mean_time': np.mean(times),
                 'std_time': np.std(times),
                 'version': self.version,
                 'type': 'Stacking',
-            }))
+            }, ignore_index=True)
             self.results.to_csv(self.mainDir + 'Results.csv', index=False)
+
+            # Document
             if self.documentResults:
                 self.document(stack, feature_set)
 
@@ -1031,8 +1006,7 @@ class Pipeline:
         """
         # Get model
         if isinstance(model, str):
-            models = Modeller(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
-            model = models[[i for i in range(len(models)) if type(models[i]).__name__ == model][0]]
+            model = Utils.getModel(model, mode=self.mode, samples=len(self.x))
 
         # Checks
         assert feature_set in self.featureSets.keys(), 'Feature Set not available.'
@@ -1123,16 +1097,20 @@ class Pipeline:
             type(self.bestModel).__name__ != model or \
                 self.bestModel.get_params() != params:
 
-            # Stacking Warning
+            # Stacking needs to be created by a separate script :/
             if 'Stacking' in model:
-                warnings.warn('Stacking Models not Production Ready, skipping to next best')
-                model = results.iloc[1]['model']
-                feature_set = results.iloc[1]['dataset']
-                params = Utils.parse_json(results.iloc[1]['params'])
+                if self.mode == 'regression':
+                    self.bestModel = StackingRegressor(n_samples=len(self.x), n_features=len(self.x.keys()))
+                elif self.mode == 'classification':
+                    self.bestModel = StackingClassifier(n_samples=len(self.x), n_features=len(self.x.keys()))
+                else:
+                    raise NotImplementedError("Mode not set")
 
-            # Model
-            models = Modeller(mode=self.mode, samples=len(self.x), objective=self.objective).return_models()
-            self.bestModel = [mod for mod in models if type(mod).__name__ == model][0]
+            else:
+                # Model
+                self.bestModel = Utils.getModel(model, mode=self.mode, samples=len(self.x))
+
+            # Set params, train, & save
             self.bestModel.set_params(**params)
             self.bestModel.fit(self.x[self.featureSets[feature_set]], self.y)
             joblib.dump(self.bestModel, self.mainDir + 'Production/v{}/Model.joblib'.format(self.version))

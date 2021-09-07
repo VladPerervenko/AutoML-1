@@ -1,7 +1,7 @@
 import re
 import numpy as np
 import pandas as pd
-from ..Utils import clean_keys
+from Amplo.Utils import clean_keys
 
 
 class DataProcesser:
@@ -303,8 +303,10 @@ class DataProcesser:
         data = data.loc[:, ~data.columns.duplicated()]
 
         # Note
-        self.removedDuplicateColumns = len(data.keys()) - n_columns
-        self.removedDuplicateRows = len(data) - n_rows
+        self.removedDuplicateColumns = n_columns - len(data.keys())
+        self.removedDuplicateRows = n_rows - len(data)
+        print(f'[AutoML] Removed {self.removedDuplicateColumns} duplicate columns and {self.removedDuplicateRows} '
+              f'duplicate rows')
 
         return data
 
@@ -319,6 +321,7 @@ class DataProcesser:
 
         # Note
         self.removedConstantColumns = columns - len(data.keys())
+        print(f'[AutoML] Removed {self.removedConstantColumns} constant columns.')
 
         return data
 
@@ -378,6 +381,7 @@ class DataProcesser:
 
         # Note
         self.imputedMissingValues = data[self.num_cols].isna().sum().sum()
+        print(f'[AutoML] Imputed {self.imputedMissingValues} missing values.')
 
         # Removes all rows with missing values
         if self.missing_values == 'remove_rows':

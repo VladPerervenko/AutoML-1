@@ -53,11 +53,11 @@ class RegressionDocumenting(BinaryDocumenting):
 
         # Store
         self.metrics = {
-            'Mean Absolute Error': [np.mean(mae), np.std(mae)],
-            'Mean Squared Error': [np.mean(mse), np.std(mse)],
-            'R2 Score': [np.mean(r2), np.std(r2)],
-            'Max Error': [np.mean(max_error), np.std(max_error)],
-            'Mean Relative Error': [np.mean(rel_error), np.std(rel_error)],
+            'Mean Absolute Error': [float(np.mean(mae)), float(np.std(mae))],
+            'Mean Squared Error': [float(np.mean(mse)), float(np.std(mse))],
+            'R2 Score': [float(np.mean(r2)), float(np.std(r2))],
+            'Max Error': [float(np.mean(max_error)), float(np.std(max_error))],
+            'Mean Relative Error': [float(np.mean(rel_error)), float(np.std(rel_error))],
         }
         self.outputMetrics = copy.deepcopy(self.metrics)
 

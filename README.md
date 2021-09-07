@@ -23,6 +23,30 @@ pip install Amplo
 
 # 2. Amplo AutoML Features
 
+## Interval Analyser
+`from Amplo.AutoML import IntervalAnalyser`
+
+Interval Analyser for Log file classification. When log files have to be classifier, and there is not enough
+data for time series methods (such as LSTMs, ROCKET or Weasel, Boss, etc), one needs to fall back to classical
+machine learning models which work better with lower samples. But this raises the problem of which samples to
+classify. You shouldn't just simply classify on every sample and accumulate, that may greatly disrupt
+classification performance. Therefore, we introduce this interval analyser. By using K-Nearest Neighbors,
+one can estimate the strength of correlation for every sample inside a log. Using this allows for better
+interval selection for classical machine learning models.
+
+To use this interval analyser, make sure:
+- That your logs are of equal length
+- That your logs have identical keys
+- That your logs are located in a folder of their class, with one parent folder with all classes, e.g.:
+
+```
++-- Parent Folder
+|   +-- Class_1
+|       +-- Log_1.*
+|       +-- Log_2.*
+|   +-- Class_2
+|       +-- Log_3.*
+```
 ## Exploratory Data Analysis
 `from Amplo.AutoML import DataExplorer`
 Automated Exploratory Data Analysis. Covers binary classification and regression.
@@ -65,6 +89,8 @@ Included Feature Extraction algorithms:
 - K-Means Features
 - Lagged Features
 - Differencing Features
+- Inverse Features
+- Datetime Features
 
 Included Feature Selection algorithms:
 - Random Forest Feature Importance (Threshold and Increment)

@@ -4,6 +4,14 @@ import pandas as pd
 from typing import Union
 
 
+def getModel(model_str, **args):
+    from Amplo.AutoML.Modeller import Modeller
+    try:
+        return [mod for mod in Modeller(**args).return_models() if type(mod).__name__ == model_str][0]
+    except IndexError:
+        raise IndexError('Model not found.')
+
+
 def boolean_input(question: str) -> bool:
     x = input(question + ' [y / n]')
     if x.lower() == 'n' or x.lower() == 'no':

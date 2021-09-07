@@ -1,18 +1,22 @@
+import unittest
 import numpy as np
-from sklearn.datasets import make_classification
+import pandas as pd
 from sklearn.base import clone
 from sklearn.metrics import SCORERS
+from sklearn.datasets import make_classification
+from Amplo.Classifiers import StackingClassifier
 
 
-class TestClassifier:
+class TestStackingClassifier(unittest.TestCase):
 
-    def __init__(self):
-        self.model = None
-        self.x = None
-        self.y = None
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.model = StackingClassifier()
+        x, y = make_classification(n_classes=5, n_informative=15)
+        cls.x, cls.y = pd.DataFrame(x), pd.Series(y)
 
     def test_set_params(self):
-        self.model.set_params(**{'depth': 10})
+        self.model.set_params(**{'CatBoostClassifier': {'depth': 10}})
 
     def test_get_params(self):
         self.model.get_params()
@@ -52,7 +56,7 @@ class TestClassifier:
 
     def test_cloneable(self):
         model = clone(self.model)
-        params = {'depth': 5}
+        params = {'CatBoostClassifier': {'depth': 10}}
         cloned = clone(clone(model).set_params(**params))
         cloned.fit(self.x, self.y)
         prediction = cloned.predict_proba(self.x)
