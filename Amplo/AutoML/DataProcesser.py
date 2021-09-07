@@ -168,6 +168,8 @@ class DataProcesser:
         assert self.is_fitted, "Object not yet fitted."
         return {
             'num_cols': self.num_cols,
+            'float_cols': self.float_cols,
+            'int_cols': self.int_cols,
             'date_cols': self.date_cols,
             'cat_cols': self.cat_cols,
             'missing_values': self.missing_values,
@@ -185,6 +187,8 @@ class DataProcesser:
         Loads settings from dictionary and recreates a fitted object
         """
         self.num_cols = settings['num_cols']
+        self.float_cols = settings['float_cols']
+        self.int_cols = settings['int_cols']
         self.cat_cols = settings['cat_cols']
         self.date_cols = settings['date_cols']
         self.missing_values = settings['missing_values']
@@ -249,12 +253,13 @@ class DataProcesser:
         for key in self.date_cols:
             data.loc[:, key] = pd.to_datetime(data[key], errors='coerce', infer_datetime_format=True, utc=True)
 
-        # Numerical columns
-        for key in [key for key in data.keys() if key not in self.date_cols and key not in self.cat_cols]:
-            if pd.api.types.is_float_dtype(data[key]):
-                data.loc[:, key] = pd.to_numeric(data[key], errors='coerce', downcast='float')
-            elif pd.api.types.is_integer_dtype(data[key]):
-                data.loc[:, key] = pd.to_numeric(data[key], errors='coerce', downcast='integer')
+        # Integer columns
+        for key in self.int_cols:
+            data.loc[:, key] = pd.to_numeric(data[key], errors='coerce', downcast='integer')
+
+        # Float columns
+        for key in self.float_cols:
+            data.loc[:, key] = pd.to_numeric(data[key], errors='coerce', downcast='float')
 
         # Categorical columns
         if fit_categorical:
