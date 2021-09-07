@@ -1,12 +1,17 @@
 import warnings
 import numpy as np
 import pandas as pd
+from typing import Union
 
 
 class Sequencer:
     # todo implement fractional differencing
 
-    def __init__(self, back=1, forward=1, shift=0, diff='none'):
+    def __init__(self,
+                 back: Union[list, int] = 1,
+                 forward: Union[list, int] = 1,
+                 shift: int = 0,
+                 diff: str = 'none'):
         """
         Sequencer. Sequences and differentiate data.
         The indices of back and forward start from 0. Therefore, if the output is included in the input,
@@ -25,21 +30,16 @@ class Sequencer:
         :param diff: differencing algo, pick between 'none', 'diff', 'log_diff'
         """
         # Tests
-        assert isinstance(back, int) or all([isinstance(x, int) for x in back]), \
-            'Back needs to be of type int or list[int].'
-        assert isinstance(forward, int) or all([isinstance(x, int) for x in forward]), \
-            'Back needs to be of type int or list[int].'
-        assert isinstance(shift, int), 'Shift needs to be of type int.'
         assert diff in ['none', 'diff', 'log_diff'], 'Diff needs to be none, diff or log_diff.'
         if isinstance(back, int):
             assert back > 0, "'back' arg needs to be strictly positive."
         else:
-            assert all([x > 0 for x in back]), "All integers in 'back' need to be strictly positive."
+            assert all([x >= 0 for x in back]), "All integers in 'back' need to be positive."
             assert all([x > 0 for x in np.diff(back)]), "All integers in 'back' need to be monotonically increasing."
         if isinstance(forward, int):
-            assert forward > 0, "'forward' arg needs to be strictly positive"
+            assert forward >= 0, "'forward' arg needs to be positive"
         else:
-            assert all([x > 0 for x in forward]), "All integers in 'forward' need to be strictly positive."
+            assert all([x >= 0 for x in forward]), "All integers in 'forward' need to be positive."
             assert all([x > 0 for x in np.diff(forward)]), \
                 "All integers in 'forward' need to be monotonically increasing."
         if diff != 'none' and isinstance(back, int):
