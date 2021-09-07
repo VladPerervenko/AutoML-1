@@ -1,4 +1,5 @@
 import re
+import warnings
 import numpy as np
 import pandas as pd
 from Amplo.Utils import clean_keys
@@ -139,6 +140,9 @@ class DataProcesser:
 
         # Clean Keys
         data = clean_keys(data)
+
+        # Impute columns
+        data = self._impute_columns(data)
 
         # Remove duplicates
         data = self.remove_duplicates(data, rows=False)
@@ -458,4 +462,18 @@ class DataProcesser:
                 if sorted(set(data[self.target])) != [i for i in range(data[self.target].nunique())]:
                     for i, val in enumerate(sorted(set(data[self.target]))):
                         data.loc[data[self.target] == val, self.target] = i
+        return data
+
+    def _impute_columns(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        *** For production ***
+        If a dataset is missing certain columns, this function looks at all registered columns and fills them with
+        zeros.
+        """
+        imputed = []
+        for keys in [self.num_cols, self.date_cols, self.cat_cols]:
+            for key in [k for k in keys if k not in data]:
+                data[key] = np.zeros(len(data))
+                imputed.append(key)
+        warnings.warn(f'Imputed {len(imputed)} missing columns! {imputed}')
         return data
