@@ -660,18 +660,20 @@ class FeatureProcesser:
         """
         Adds the selected k-means features
         """
-        # Normalize data
-        tmp = copy.deepcopy(self.x.loc[:, self._centers.keys()])
-        tmp -= self._means
-        tmp /= self._stds
+        # Only execute if necessary
+        if len(self.kMeansFeatures) > 0:
+            # Normalize data
+            tmp = copy.deepcopy(self.x.loc[:, self._centers.keys()])
+            tmp -= self._means
+            tmp /= self._stds
 
-        # Calculate centers
-        for key in self.kMeansFeatures:
-            ind = int(key[key.find('dist__') + 6: key.rfind('_')])
-            self.x.loc[:, key] = np.sqrt(np.square(tmp - self._centers.iloc[ind]).sum(axis=1))
+            # Calculate centers
+            for key in self.kMeansFeatures:
+                ind = int(key[key.find('dist__') + 6: key.rfind('_')])
+                self.x.loc[:, key] = np.sqrt(np.square(tmp - self._centers.iloc[ind]).sum(axis=1))
 
-        if self.verbosity > 0:
-            print('[AutoML] Added {} K-Means features'.format(len(self.kMeansFeatures)))
+            if self.verbosity > 0:
+                print('[AutoML] Added {} K-Means features'.format(len(self.kMeansFeatures)))
 
     def _fit_diff_features(self):
         """
