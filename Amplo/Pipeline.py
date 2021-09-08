@@ -46,6 +46,7 @@ class Pipeline:
                  objective: str = None,
 
                  # Data Processing
+                 num_cols: list = None,
                  int_cols: list = None,
                  float_cols: list = None,
                  date_cols: list = None,
@@ -93,7 +94,8 @@ class Pipeline:
                  process_data: bool = True,
                  document_results: bool = True,
                  verbose: int = 1,
-                 no_dirs: bool = False):
+                 no_dirs: bool = False,
+                 **args):
         """
         Automated Machine Learning Pipeline for tabular data.
         Designed for predictive maintenance applications, failure identification, failure prediction, condition

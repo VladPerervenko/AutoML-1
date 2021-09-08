@@ -254,17 +254,17 @@ class FeatureProcesser:
         """
         Loads settings from dictionary and recreates a fitted object
         """
-        self.linearFeatures = settings['linearFeatures']
-        self.crossFeatures = settings['crossFeatures']
-        self.trigonometricFeatures = settings['trigonometricFeatures']
-        self.inverseFeatures = settings['inverseFeatures']
-        self.kMeansFeatures = settings['kMeansFeatures']
-        self.laggedFeatures = settings['laggedFeatures']
-        self.diffFeatures = settings['diffFeatures']
-        self.featureSets = settings['featureSets']
-        self._means = pd.read_json(settings['_means'], typ='series')
-        self._stds = pd.read_json(settings['_stds'], typ='series')
-        self._centers = pd.read_json(settings['_centers'])
+        self.linearFeatures = settings['linearFeatures'] if 'linearFeatures' in settings else []
+        self.crossFeatures = settings['crossFeatures'] if 'crossFeatures' in settings else []
+        self.trigonometricFeatures = settings['trigonometricFeatures'] if 'trigonometricFeatures' in settings else []
+        self.inverseFeatures = settings['inverseFeatures'] if 'inverseFeatures' in settings else []
+        self.kMeansFeatures = settings['kMeansFeatures'] if 'kMeansFeatures' in settings else []
+        self.laggedFeatures = settings['laggedFeatures'] if 'laggedFeatures' in settings else []
+        self.diffFeatures = settings['diffFeatures'] if 'diffFeatures' in settings else {}
+        self.featureSets = settings['featureSets'] if 'featureSets' in settings else []
+        self._means = pd.read_json(settings['_means'], typ='series') if 'v' in settings else []
+        self._stds = pd.read_json(settings['_stds'], typ='series') if '_stds' in settings else []
+        self._centers = pd.read_json(settings['_centers']) if '_centers' in settings else []
         self.is_fitted = True
 
     def _clean_set(self, x: pd.DataFrame, y: pd.Series) -> None:

@@ -186,19 +186,19 @@ class DataProcesser:
         """
         Loads settings from dictionary and recreates a fitted object
         """
-        self.num_cols = settings['num_cols']
-        self.float_cols = settings['float_cols']
-        self.int_cols = settings['int_cols']
-        self.cat_cols = settings['cat_cols']
-        self.date_cols = settings['date_cols']
-        self.missing_values = settings['missing_values']
-        self.outlier_removal = settings['outlier_removal']
-        self.z_score_threshold = settings['z_score_threshold']
+        self.num_cols = settings['num_cols'] if 'num_cols' in settings else []
+        self.float_cols = settings['float_cols'] if 'float_cols' in settings else []
+        self.int_cols = settings['int_cols'] if 'int_cols' in settings else []
+        self.cat_cols = settings['cat_cols'] if 'cat_cols' in settings else []
+        self.date_cols = settings['date_cols'] if 'date_cols' in settings else []
+        self.missing_values = settings['missing_values'] if 'num_cols' in settings else []
+        self.outlier_removal = settings['outlier_removal'] if 'num_cols' in settings else []
+        self.z_score_threshold = settings['z_score_threshold'] if 'num_cols' in settings else []
         self._means = None if settings['_means'] is None else pd.read_json(settings['_means'])
         self._stds = None if settings['_stds'] is None else pd.read_json(settings['_stds'])
         self._q1 = None if settings['_q1'] is None else pd.read_json(settings['_q1'])
         self._q3 = None if settings['_q3'] is None else pd.read_json(settings['_q3'])
-        self.dummies = settings['dummies']
+        self.dummies = settings['dummies'] if 'dummies' in settings else {}
         self.is_fitted = True
 
     def infer_data_types(self, data: pd.DataFrame):
@@ -260,6 +260,11 @@ class DataProcesser:
         # Float columns
         for key in self.float_cols:
             data.loc[:, key] = pd.to_numeric(data[key], errors='coerce', downcast='float')
+
+        # Numeric columns (old version)
+        if len(self.float_cols) == len(self.int_cols) == 0 and len(self.num_cols) > 0:
+            for key in self.num_cols:
+                data.loc[:, key] = pd.to_numeric(data[key], errors='coerce')
 
         # Categorical columns
         if fit_categorical:
