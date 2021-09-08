@@ -261,11 +261,6 @@ class DataProcesser:
         for key in self.float_cols:
             data.loc[:, key] = pd.to_numeric(data[key], errors='coerce', downcast='float')
 
-        # Numeric columns (old version)
-        if len(self.float_cols) == len(self.int_cols) == 0 and len(self.num_cols) > 0:
-            for key in self.num_cols:
-                data.loc[:, key] = pd.to_numeric(data[key], errors='coerce')
-
         # Categorical columns
         if fit_categorical:
             data = self._fit_cat_cols(data)
@@ -273,6 +268,12 @@ class DataProcesser:
             assert self.is_fitted, ".convert_data_types() was called with fit_categorical=False, while categorical " \
                                    "encoder is not yet fitted."
             data = self._transform_cat_cols(data)
+
+        # We need everything to become numeric, so all that is not mentioned will be handled as numeric
+        all_cols = self.float_cols + self.int_cols + self.num_cols + self.date_cols + self.cat_cols
+        for key in data.keys():
+            if key not in all_cols:
+                data.loc[:, key] = pd.to_numeric(data[key], errors='coerce')
 
         return data
 

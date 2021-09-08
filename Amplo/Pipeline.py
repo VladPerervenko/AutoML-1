@@ -1150,7 +1150,7 @@ class Pipeline:
         # Process data
         x = self.dataProcesser.transform(x)
         if x.astype('float32').replace([np.inf, -np.inf], np.nan).isna().sum().sum() != 0:
-            raise ValueError('Data should not contain NaN or Infinities after cleaning!')
+            raise ValueError(f"Column(s) with NaN: {list(x.keys()[x.isna().sum() > 0])}")
 
         # Split output
         y = None
