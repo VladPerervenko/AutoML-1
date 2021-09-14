@@ -552,8 +552,8 @@ class Pipeline:
             self.scorer = metrics.SCORERS[self.objective]
 
             # Copy to settings
-            self.settings['mode'] = self.mode
-            self.objective = self.objective
+            self.settings['pipeline']['mode'] = self.mode
+            self.settings['pipeline']['objective'] = self.objective
         return
 
     def _eda(self):
