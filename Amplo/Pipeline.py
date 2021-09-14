@@ -540,12 +540,8 @@ class Pipeline:
         if self.mode is None:
 
             # Classification if string
-            if data[self.target].dtype == str:
-                self.mode = 'classification'
-                self.objective = 'neg_log_loss'
-
-            # Or if unique values is less than 10%
-            elif data[self.target].nunique() < 0.1 * len(data):
+            if data[self.target].dtype == str or \
+                    data[self.target].nunique() < 0.1 * len(data):
                 self.mode = 'classification'
                 self.objective = 'neg_log_loss'
 
@@ -554,6 +550,10 @@ class Pipeline:
                 self.mode = 'regression'
                 self.objective = 'neg_mean_absolute_error'
             self.scorer = metrics.SCORERS[self.objective]
+
+            # Copy to settings
+            self.settings['mode'] = self.mode
+            self.objective = self.objective
         return
 
     def _eda(self):
